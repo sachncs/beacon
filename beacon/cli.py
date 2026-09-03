@@ -74,15 +74,15 @@ def _build_story(args) -> None:
 
 
 def _build_speed(args) -> None:
-    from .speed import run_speed_mem
+    from .speed import run
 
-    run_speed_mem(
-        model_id=args.model,
-        window_size=args.window,
-        num_sinks=args.sinks,
-        context_lens=[int(x) for x in args.ctxs.split(",")],
-        decode_steps=args.decode_steps,
-        methods=[x.strip() for x in args.methods.split(",") if x],
+    run(
+        model=args.model,
+        cfg=_cfg(args),
+        ctx=[int(x) for x in args.ctx.split(",")],
+        method=tuple(x.strip() for x in args.method.split(",") if x),
+        step=args.step,
+        seed=args.seed,
         dtype=args.dtype,
         out=Path(args.out) if args.out else None,
     )
@@ -141,10 +141,11 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("speed", help="Speed / KV-cache memory benchmark (Figure 2)")
     p.add_argument("--model", default=DEFAULT_MODEL)
     p.add_argument("--window", type=int, default=64)
-    p.add_argument("--sinks", type=int, default=4)
-    p.add_argument("--ctxs", default="128,256,512,1024,2048,4096,8192,16384,65536")
-    p.add_argument("--methods", default="fa,swa")
-    p.add_argument("--decode-steps", type=int, default=64)
+    p.add_argument("--sink", type=int, default=4)
+    p.add_argument("--ctx", default="128,256,512,1024,2048,4096,8192,16384,65536")
+    p.add_argument("--method", default="fa,swa")
+    p.add_argument("--step", type=int, default=64)
+    p.add_argument("--seed", type=int, default=0)
     p.add_argument("--dtype", default="float16")
     p.add_argument("--out", type=str, default=None)
 
