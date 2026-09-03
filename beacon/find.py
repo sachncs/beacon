@@ -2,229 +2,178 @@
 
 We evaluate retrieval across three S-NIAH variants:
 
-* **S-NIAH-1**: A simple factual statement. ``"The best thing to do in San Francisco is
-  to eat a sandwich at the restaurant."``  →  ``Question: What is the best thing to do
-  in San Francisco?``
-* **S-NIAH-2**: An identifier (a UUID-like value).  → ``Question: What is the special
-  magic number for {key}?``
-* **S-NIAH-3**: A multi-hop variant where the needle encodes a key→value pair and the
-  question asks for the value of a *different* key that requires looking up two facts.
+* **V1**: A simple factual statement.  e.g. ``"The best thing to do in San
+  Francisco is to eat a sandwich at the restaurant."`` → ``"sandwich"``
+* **V2**: An identifier (a UUID-like value).
+* **V3**: A multi-hop variant where the needle encodes a key→value pair and the
+  question asks for the value of a *different* key that requires looking up two
+  facts.
 
-Following the paper, we score accuracy by checking whether the model's greedy-decoded
-answer string contains the expected ground-truth substring (case-insensitive).
+Each variant is a callable in :data:`VARIANT` that returns
+``(needle, question, answer)``. Following the paper, accuracy is the fraction
+of greedy-decoded completions whose text contains the ground-truth answer
+(case- and whitespace-insensitive).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import math
 import random
 import string
-from dataclasses import dataclass
+from collections import defaultdict
 from pathlib import Path
-from typing import Callable
 
 import torch
 
-from .patch import Config, patch
+from .load import load
+from .patch import Config
+from .sample import Sample, contains, filler, insert
 
 
-# Three S-NIAH variants used in the paper.
-NEEDLE_S1 = "The best thing to do in San Francisco is to eat a sandwich at the restaurant."
-QUESTION_S1 = "What is the best thing to do in San Francisco?"
-ANSWER_S1 = "sandwich"
+# V1: constant needle / question / answer.
+NEEDLE = "The best thing to do in San Francisco is to eat a sandwich at the restaurant."
+QUESTION = "What is the best thing to do in San Francisco?"
+ANSWER = "sandwich"
 
 
-def _random_key(rng: random.Random) -> str:
+def key(rng: random.Random) -> str:
     return "".join(rng.choices(string.ascii_uppercase + string.digits, k=8))
 
 
-def _make_niah2(rng: random.Random) -> tuple[str, str, str]:
-    key = _random_key(rng)
+def v1(rng: random.Random) -> tuple[str, str, str]:
+    return NEEDLE, QUESTION, ANSWER
+
+
+def v2(rng: random.Random) -> tuple[str, str, str]:
+    k = key(rng)
     magic = str(rng.randint(10**8, 10**9))
-    needle = f"The special magic number for {key} is: {magic}"
-    question = f"What is the special magic number for {key}?"
-    return needle, question, magic
+    return f"The special magic number for {k} is: {magic}", f"What is the special magic number for {k}?", magic
 
 
-def _make_niah3(rng: random.Random) -> tuple[str, str, str]:
-    key_a = _random_key(rng)
-    val_a = "".join(rng.choices(string.ascii_lowercase, k=10))
-    key_b = _random_key(rng)
-    val_b = "".join(rng.choices(string.ascii_lowercase, k=10))
-    needle = (
-        f"If {key_a} then {val_a}. "
-        f"If {key_b} then {val_b}. "
+def v3(rng: random.Random) -> tuple[str, str, str]:
+    a, va = key(rng), "".join(rng.choices(string.ascii_lowercase, k=10))
+    b, vb = key(rng), "".join(rng.choices(string.ascii_lowercase, k=10))
+    return (
+        f"If {a} then {va}. If {b} then {vb}. ",
+        f"Question: {vb} is the value of which key?",
+        b,
     )
-    question = f"Question: {val_b} is the value of which key?"
-    # The answer is key_b itself, requiring multi-hop.
-    return needle, question, key_b
 
 
-def _filler_sentences(rng: random.Random, n_words: int) -> str:
-    """Build a haystack of ~n_words pseudo-English filler text."""
-    vocab = (
-        "the of and to in a is that for on with as it was by an be this are not from "
-        "at or have but his they she which we one all there their what when your can "
-        "said about would been if more her than them no time only do some could so my "
-        "these other into make them then like over also our who has been"
-    ).split()
-    out = []
-    total = 0
-    while total < n_words:
-        sent_len = rng.randint(6, 14)
-        sent = " ".join(rng.choice(vocab) for _ in range(sent_len)) + "."
-        out.append(sent.capitalize())
-        total += sent_len + 1
-    return " ".join(out)
+VARIANT: dict[str, callable] = {"1": v1, "2": v2, "3": v3}
 
 
-def _build_prompt(haystack: str, needle: str, question: str, insert_frac: float) -> str:
-    """Insert ``needle`` at fraction ``insert_frac`` of the haystack."""
-    tokens = haystack.split()
-    n = len(tokens)
-    pos = max(1, min(n - 1, int(n * insert_frac)))
-    tokens.insert(pos, needle)
-    body = " ".join(tokens)
-    return f"{body}\n\n{question}\nAnswer:"
-
-
-@dataclass
-class NIAHSample:
-    context_len: int
-    insert_frac: float
-    prompt: str
-    answer: str
-
-
-def make_niah_samples(
+def samples(
     *,
-    context_lens: list[int],
-    insert_fracs: list[float] | None = None,
+    ctx: list[int],
+    frac: list[float] | None = None,
     variant: str = "1",
     seed: int = 0,
-    n_per_cell: int = 1,
-) -> list[NIAHSample]:
-    """Generate S-NIAH samples across (context_len, insert_frac) grid cells."""
-    if insert_fracs is None:
-        insert_fracs = [0.0, 0.25, 0.5, 0.75, 1.0]
+    n: int = 1,
+) -> list[Sample]:
+    """Generate NIAH samples for one variant over the (ctx, frac) grid."""
+    if frac is None:
+        frac = [0.0, 0.25, 0.5, 0.75, 1.0]
+    if variant not in VARIANT:
+        raise ValueError(f"unknown variant: {variant!r}; choose from {list(VARIANT)}")
+
+    gen = VARIANT[variant]
     rng = random.Random(seed)
-    samples: list[NIAHSample] = []
-
-    for ctx in context_lens:
-        for frac in insert_fracs:
-            for _ in range(n_per_cell):
-                haystack = _filler_sentences(rng, ctx)
-                if variant == "1":
-                    prompt = _build_prompt(haystack, NEEDLE_S1, QUESTION_S1, frac)
-                    answer = ANSWER_S1
-                elif variant == "2":
-                    needle, question, magic = _make_niah2(rng)
-                    prompt = _build_prompt(haystack, needle, question, frac)
-                    answer = magic
-                elif variant == "3":
-                    needle, question, key = _make_niah3(rng)
-                    prompt = _build_prompt(haystack, needle, question, frac)
-                    answer = key
-                else:
-                    raise ValueError(f"Unknown variant: {variant}")
-                samples.append(NIAHSample(ctx, frac, prompt, answer))
-    return samples
+    out: list[Sample] = []
+    for c in ctx:
+        for f in frac:
+            for _ in range(n):
+                hay = filler(rng, c)
+                needle, question, answer = gen(rng)
+                body = insert(hay, needle, f)
+                prompt = f"{body}\n\n{question}\nAnswer:"
+                out.append(Sample(prompt=prompt, answer=answer, meta={"variant": variant, "ctx": c}))
+    return out
 
 
-def _score_contains(answer: str, completion: str) -> bool:
-    return answer.lower() in completion.lower()
-
-
-def run_niah(
+def run(
     *,
-    model_id: str,
-    window_size: int,
-    num_sinks: int,
-    context_lens: list[int],
-    variants: list[str] | None = None,
-    insert_fracs: list[float] | None = None,
-    max_new_tokens: int = 32,
-    dtype: str = "float16",
+    model: str,
+    cfg: Config,
+    ctx: list[int],
+    variant: list[str] | None = None,
+    frac: list[float] | None = None,
+    max: int = 32,
+    seed: int = 0,
+    n: int = 1,
+    dtype: torch.dtype | str = torch.float16,
+    out: Path | None = None,
 ) -> dict[tuple[str, int], float]:
-    """Run S-NIAH over the (variant, context_len) grid.
+    """Run NIAH over the (variant, ctx_len) grid. Returns ``{(variant, ctx): acc}``."""
+    if variant is None:
+        variant = list(VARIANT)
 
-    Returns accuracy per cell as ``{(variant, ctx_len): acc}``.
-    """
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+    m, tok = load(model, cfg, dtype=dtype)
 
-    if variants is None:
-        variants = ["1", "2", "3"]
+    # Aggregate accuracy per (variant, ctx) cell.
+    correct: dict[tuple[str, int], int] = defaultdict(int)
+    total: dict[tuple[str, int], int] = defaultdict(int)
 
-    cfg = Config(window=window_size, sink=num_sinks)
-    torch_dtype = getattr(torch, dtype)
-    tok = AutoTokenizer.from_pretrained(model_id)
-    if tok.pad_token is None:
-        tok.pad_token = tok.eos_token
-    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch_dtype)
-    model = patch(model, cfg)
-    model.eval()
+    for v in variant:
+        cell = samples(ctx=ctx, frac=frac, variant=v, seed=seed, n=n)
+        for s in cell:
+            ids = tok(s.prompt, return_tensors="pt").input_ids.to(m.device)
+            with torch.no_grad():
+                out_ids = m.generate(
+                    ids,
+                    max_new_tokens=max,
+                    do_sample=False,
+                    pad_token_id=tok.pad_token_id,
+                )
+            completion = tok.decode(out_ids[0, ids.shape[1]:], skip_special_tokens=True)
+            key_t = (v, s.meta["ctx"])
+            total[key_t] += 1
+            if contains(s.answer, completion):
+                correct[key_t] += 1
 
-    results: dict[tuple[str, int], float] = {}
-    for variant in variants:
-        samples = make_niah_samples(
-            context_lens=context_lens,
-            insert_fracs=insert_fracs,
-            variant=variant,
-        )
-        for ctx in context_lens:
-            cell = [s for s in samples if s.context_len == ctx]
-            correct = 0
-            for s in cell:
-                ids = tok(s.prompt, return_tensors="pt").input_ids.to(model.device)
-                with torch.no_grad():
-                    out = model.generate(
-                        ids,
-                        max_new_tokens=max_new_tokens,
-                        do_sample=False,
-                        pad_token_id=tok.pad_token_id,
-                    )
-                completion = tok.decode(out[0, ids.shape[1]:], skip_special_tokens=True)
-                if _score_contains(s.answer, completion):
-                    correct += 1
-            acc = correct / max(1, len(cell))
-            results[(variant, ctx)] = acc
-            print(f"S-NIAH-{variant} ctx={ctx}: acc={acc:.3f}")
+    results = {k: correct[k] / max(1, total[k]) for k in total}
+    for (v, c), acc in results.items():
+        print(f"NIAH-{v} ctx={c}: acc={acc:.3f}")
+
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps({f"{v}_{c}": acc for (v, c), acc in results.items()}, indent=2))
     return results
 
 
-def _cli() -> None:
-    p = argparse.ArgumentParser(description="Run S-NIAH (Table 3)")
+def cli(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(description="Run NIAH (Table 3)")
     p.add_argument("--model", required=True)
     p.add_argument("--window", type=int, default=256)
-    p.add_argument("--sinks", type=int, default=4)
-    p.add_argument("--ctxs", default="512,1024,2048,4096")
-    p.add_argument("--variants", default="1,2,3")
-    p.add_argument("--max-new", type=int, default=32)
+    p.add_argument("--sink", type=int, default=4)
+    p.add_argument("--ctx", default="512,1024,2048,4096")
+    p.add_argument("--variant", default="1,2,3")
+    p.add_argument("--frac", default="0.0,0.25,0.5,0.75,1.0")
+    p.add_argument("--max", type=int, default=32)
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--n", type=int, default=1)
     p.add_argument("--dtype", default="float16")
     p.add_argument("--out", type=Path, default=None)
-    args = p.parse_args()
+    args = p.parse_args(argv)
 
-    ctxs = [int(x) for x in args.ctxs.split(",") if x]
-    variants = [x.strip() for x in args.variants.split(",") if x]
-
-    results = run_niah(
-        model_id=args.model,
-        window_size=args.window,
-        num_sinks=args.sinks,
-        context_lens=ctxs,
-        variants=variants,
-        max_new_tokens=args.max_new,
+    run(
+        model=args.model,
+        cfg=Config(window=args.window, sink=args.sink),
+        ctx=[int(x) for x in args.ctx.split(",")],
+        variant=[x.strip() for x in args.variant.split(",") if x],
+        frac=[float(x) for x in args.frac.split(",") if x],
+        max=args.max,
+        seed=args.seed,
+        n=args.n,
         dtype=args.dtype,
+        out=args.out,
     )
+    return 0
 
-    out = {f"{v}_{c}": acc for (v, c), acc in results.items()}
-    print(json.dumps(out, indent=2))
-    if args.out:
-        args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(json.dumps(out, indent=2))
+
+__all__ = ["VARIANT", "samples", "run", "cli"]
 
 
 if __name__ == "__main__":
-    _cli()
+    raise SystemExit(cli())
