@@ -11,5 +11,5 @@ Public API::
 from .load import load
 from .patch import Config, mask, patch
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = ["Config", "mask", "patch", "load", "__version__"]
