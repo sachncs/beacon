@@ -1,4 +1,4 @@
-# swa-beats-linear
+# beacon
 
 A reproduction of **"Sliding-window beats linear attention"** (Jolicoeur-Martineau et al., 2026).
 
@@ -14,40 +14,41 @@ the paper (Table 1–4, Figure 2).
 
 | File | What it does |
 |------|--------------|
-| `src/swa/patch.py`   | Core SWA-with-sinks mask + HF model patch |
-| `src/swa/short_eval.py`  | MMLU, ARC-C, ARC-E, HellaSwag, PIQA, WinoGrande (Table 2) |
-| `src/swa/long_eval.py`   | Single Needle-in-a-Haystack + BABILong (Tables 3–4) |
-| `src/swa/speed_mem.py`   | Throughput / KV-cache size vs context (Figure 2) |
-| `src/swa/run.py`         | Unified CLI |
+| `beacon/patch.py`     | Core SWA-with-sinks mask + HF model patch |
+| `beacon/short.py`     | MMLU, ARC-C, ARC-E, HellaSwag, PIQA, WinoGrande (Table 2) |
+| `beacon/find.py`      | Single Needle-in-a-Haystack (Tables 3) |
+| `beacon/story.py`     | BABILong (Table 4) |
+| `beacon/speed.py`     | Throughput / KV-cache size vs context (Figure 2) |
+| `beacon/cli.py`       | Unified CLI (`beacon-eval`) |
 
 ## Quick start
 
 Default model is **openbmb/MiniCPM5-1B** (1B, standard `LlamaForCausalLM`,
-GQA 16/2, 131K context — passes through the SWA patch unchanged).
+GQA 16/2, 131K context — passes through the patch unchanged).
 
 ```bash
-pip install -e ".[eval,babilong]"
+pip install -e ".[eval]"
 
 # short-context eval (Table 2)
-python -m swa.run short --model openbmb/MiniCPM5-1B \
+python -m beacon.cli short --model openbmb/MiniCPM5-1B \
     --window 64 --sinks 4 --tasks mmlu,arc_easy,hellaswag,piqa,winogrande
 
 # long-context eval (Tables 3-4)
-python -m swa.run niah --model openbmb/MiniCPM5-1B \
+python -m beacon.cli find --model openbmb/MiniCPM5-1B \
     --window 256 --sinks 4
 
-python -m swa.run babi --model openbmb/MiniCPM5-1B \
+python -m beacon.cli story --model openbmb/MiniCPM5-1B \
     --window 256 --sinks 4
 
 # speed/memory benchmark (Figure 2)
-python -m swa.run speed --model openbmb/MiniCPM5-1B \
+python -m beacon.cli speed --model openbmb/MiniCPM5-1B \
     --window 64 --sinks 4
 ```
 
-## Using the SWA patch directly
+## Using the patch directly
 
 ```python
-from swa import patch_swa
+from beacon import patch_swa
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model = AutoModelForCausalLM.from_pretrained("openbmb/MiniCPM5-1B")

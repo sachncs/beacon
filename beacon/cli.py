@@ -3,8 +3,8 @@
 Subcommands:
 
 * ``short``  — Table 2 benchmarks (MMLU, ARC, HellaSwag, PIQA, WinoGrande)
-* ``niah``   — Table 3  (Single Needle-in-a-Haystack)
-* ``babi``   — Table 4  (BABILong)
+* ``find``   — Table 3  (Single Needle-in-a-Haystack)
+* ``story``  — Table 4  (BABILong)
 * ``speed``  — Figure 2 (throughput / KV-cache memory)
 """
 
@@ -15,11 +15,11 @@ import os
 import sys
 
 
-DEFAULT_MODEL = os.environ.get("SWA_MODEL", "openbmb/MiniCPM5-1B")
+DEFAULT_MODEL = os.environ.get("BEACON_MODEL", "openbmb/MiniCPM5-1B")
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="swa-eval")
+    parser = argparse.ArgumentParser(prog="beacon-eval")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     # short
@@ -34,8 +34,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--dtype", default="float16")
     p.add_argument("--out", type=str, default=None)
 
-    # niah
-    p = sub.add_parser("niah", help="Single Needle-in-a-Haystack (Table 3)")
+    # find (NIAH)
+    p = sub.add_parser("find", help="Single Needle-in-a-Haystack (Table 3)")
     p.add_argument("--model", default=DEFAULT_MODEL)
     p.add_argument("--window", type=int, default=256)
     p.add_argument("--sinks", type=int, default=4)
@@ -45,8 +45,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--dtype", default="float16")
     p.add_argument("--out", type=str, default=None)
 
-    # babi (babilong)
-    p = sub.add_parser("babi", help="BABILong (Table 4)")
+    # story (babilong)
+    p = sub.add_parser("story", help="BABILong (Table 4)")
     p.add_argument("--model", default=DEFAULT_MODEL)
     p.add_argument("--window", type=int, default=256)
     p.add_argument("--sinks", type=int, default=4)
@@ -70,23 +70,23 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.cmd == "short":
-        from .short_eval import run_short_eval
+        from .short import run_short_eval
 
         return _run(run_short_eval, args, [
             "model_id", "window_size", "num_sinks", "tasks",
             "batch_size", "num_fewshot", "limit", "dtype",
         ], out=getattr(args, "out", None))
 
-    if args.cmd == "niah":
-        from .long_eval import run_niah
+    if args.cmd == "find":
+        from .find import run_niah
 
         return _run(run_niah, args, [
             "model_id", "window_size", "num_sinks",
             "context_lens", "variants", "max_new_tokens", "dtype",
         ], out=getattr(args, "out", None))
 
-    if args.cmd == "babi":
-        from .babilong import run_babilong
+    if args.cmd == "story":
+        from .story import run_babilong
 
         return _run(run_babilong, args, [
             "model_id", "window_size", "num_sinks",
@@ -94,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
         ], out=getattr(args, "out", None))
 
     if args.cmd == "speed":
-        from .speed_mem import run_speed_mem
+        from .speed import run_speed_mem
 
         from pathlib import Path
         kwargs = dict(

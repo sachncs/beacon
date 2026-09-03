@@ -10,16 +10,15 @@ Run: ``pytest tests/ -q`` (after ``pip install -e ".[dev]"``) or
 ``python tests/test_patch.py`` for a no-deps smoke test.
 """
 
-import math
 import sys
 from pathlib import Path
 
 import torch
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 
-from swa.patch import SWAConfig, swa_mask, patch_swa, SWAPatchedModel  # noqa: E402
+from beacon.patch import SWAConfig, swa_mask, patch_swa, SWAPatchedModel  # noqa: E402
 
 
 def test_mask_shape_and_dtype():

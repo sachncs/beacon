@@ -11,16 +11,16 @@ benchmarks used in the paper:
 
 Usage (programmatic)::
 
-    from swa.short_eval import run_short_eval
+    from beacon.short import run_short_eval
     results = run_short_eval(
-        model_id="Qwen/Qwen2.5-1.5B-Instruct",
+        model_id="openbmb/MiniCPM5-1B",
         window_size=64, num_sinks=4,
         tasks=["mmlu", "arc_easy", "hellaswag", "piqa", "winogrande"],
     )
 
 Or via the CLI::
 
-    python -m swa.run short --model <id> --window 64 --sinks 4 --tasks mmlu,...
+    python -m beacon.cli short --model <id> --window 64 --sinks 4 --tasks mmlu,...
 """
 
 from __future__ import annotations
