@@ -1,0 +1,79 @@
+"""Tests for beacon.speed — Method registry, kv() analytic formula."""
+
+import sys
+from pathlib import Path
+
+import torch
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from beacon.patch import Config  # noqa: E402
+from beacon.speed import METHOD, Method, fa, kv, swa  # noqa: E402
+
+
+def test_method_registry_has_fa_and_swa():
+    assert set(METHOD.keys()) == {"fa", "swa"}
+    assert all(isinstance(m, Method) for m in METHOD.values())
+
+
+def test_fa_is_pass_through():
+    from transformers import AutoModelForCausalLM
+
+    m = AutoModelForCausalLM.from_pretrained(
+        "hf-internal-testing/tiny-random-LlamaForCausalLM"
+    )
+    assert fa(m, None) is m
+
+
+def test_swa_wraps_with_patch():
+    from transformers import AutoModelForCausalLM
+
+    m = AutoModelForCausalLM.from_pretrained(
+        "hf-internal-testing/tiny-random-LlamaForCausalLM"
+    )
+    cfg = Config(window=8, sink=2)
+    out = swa(m, cfg)
+    assert out is m
+    assert m.config._attn_implementation == "eager"
+
+
+def test_kv_matches_analytic_formula():
+    from transformers import AutoConfig, AutoModelForCausalLM
+
+    config = AutoConfig.from_pretrained(
+        "hf-internal-testing/tiny-random-LlamaForCausalLM",
+        num_hidden_layers=2,
+    )
+    model = AutoModelForCausalLM.from_config(config)
+
+    bytes_per = torch.tensor([], dtype=torch.float32).element_size()
+    expected = 2 * 2 * 128 * config.hidden_size * bytes_per / (1024 * 1024)
+    assert abs(kv(model, 128) - expected) < 1e-9
+    # Doubling the sequence length should double the KV-cache memory.
+    assert abs(kv(model, 256) - 2 * expected) < 1e-9
+
+
+def test_unknown_method_in_bench_raises():
+    """bench() rejects method names not in METHOD."""
+    import pytest
+
+    from beacon.speed import bench
+
+    with pytest.raises(ValueError):
+        bench(
+            model_id="hf-internal-testing/tiny-random-LlamaForCausalLM",
+            method="bogus",
+            cfg=Config(),
+            ctx=[8],
+            step=1,
+        )
+
+
+if __name__ == "__main__":
+    test_method_registry_has_fa_and_swa()
+    test_fa_is_pass_through()
+    test_swa_wraps_with_patch()
+    test_kv_matches_analytic_formula()
+    test_unknown_method_in_bench_raises()
+    print("All speed tests passed.")
