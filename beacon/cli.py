@@ -52,10 +52,13 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("story", help="BABILong (Table 4)")
     p.add_argument("--model", default=DEFAULT_MODEL)
     p.add_argument("--window", type=int, default=256)
-    p.add_argument("--sinks", type=int, default=4)
-    p.add_argument("--ctxs", default="1000,2000,4000,8000")
-    p.add_argument("--qa-ids", default="1,2,3,4,5")
-    p.add_argument("--max-new", type=int, default=32)
+    p.add_argument("--sink", type=int, default=4)
+    p.add_argument("--ctx", default="1000,2000,4000,8000")
+    p.add_argument("--task", default="1,2,3,4,5")
+    p.add_argument("--frac", default="0.5")
+    p.add_argument("--max", type=int, default=32)
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--n", type=int, default=3)
     p.add_argument("--dtype", default="float16")
     p.add_argument("--out", type=str, default=None)
 
@@ -90,11 +93,12 @@ def main(argv: list[str] | None = None) -> int:
         ], out=getattr(args, "out", None))
 
     if args.cmd == "story":
-        from .story import run_babilong
+        from .story import run as run_story
+        from .patch import Config
 
-        return _run(run_babilong, args, [
-            "model_id", "window_size", "num_sinks",
-            "context_word_lens", "qa_ids", "max_new_tokens", "dtype",
+        return _run(run_story, args, [
+            "model", "cfg",
+            "ctx", "task", "frac", "max", "seed", "n", "dtype",
         ], out=getattr(args, "out", None))
 
     if args.cmd == "speed":
@@ -123,19 +127,34 @@ def _run(fn, args, keys, out=None):
     from pathlib import Path
     from .patch import Config
 
-    # The find subcommand already takes a Config object; build it from flags.
-    if args.cmd == "find":
-        kwargs = {
-            "model": args.model,
-            "cfg": Config(window=args.window, sink=args.sink),
-            "ctx": [int(x) for x in args.ctx.split(",")],
-            "variant": [x.strip() for x in args.variant.split(",") if x],
-            "frac": [float(x) for x in args.frac.split(",") if x],
-            "max": args.max,
-            "seed": args.seed,
-            "n": args.n,
-            "dtype": args.dtype,
-        }
+    # The find and story subcommands take a Config object; build it from flags.
+    if args.cmd in ("find", "story"):
+        ctx = [int(x) for x in args.ctx.split(",")]
+        frac = [float(x) for x in args.frac.split(",") if x]
+        if args.cmd == "find":
+            kwargs = {
+                "model": args.model,
+                "cfg": Config(window=args.window, sink=args.sink),
+                "ctx": ctx,
+                "variant": [x.strip() for x in args.variant.split(",") if x],
+                "frac": frac,
+                "max": args.max,
+                "seed": args.seed,
+                "n": args.n,
+                "dtype": args.dtype,
+            }
+        else:  # story
+            kwargs = {
+                "model": args.model,
+                "cfg": Config(window=args.window, sink=args.sink),
+                "ctx": ctx,
+                "task": [int(x) for x in args.task.split(",")],
+                "frac": frac,
+                "max": args.max,
+                "seed": args.seed,
+                "n": args.n,
+                "dtype": args.dtype,
+            }
         if args.out:
             kwargs["out"] = Path(args.out)
         fn(**kwargs)
