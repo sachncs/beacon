@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "swa-beats-linear"
+version = "0.1.0"
+description = "Training-free Sliding Window Attention with sinks (Jolicoeur-Martineau et al., 2026)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "swa-beats-linear reproduction"}]
+dependencies = [
+    "torch>=2.1",
+    "transformers>=4.43",
+    "accelerate>=0.30",
+    "datasets>=2.19",
+    "huggingface_hub>=0.23",
+]
+
+[project.optional-dependencies]
+eval = [
+    "lm-eval>=0.4.3",
+]
+babilong = [
+    "babilong>=0.0.1",
+]
+dev = [
+    "pytest>=8",
+]
+
+[project.scripts]
+swa-eval = "swa.run:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+swa = ["py.typed"]
