@@ -34,7 +34,7 @@ from typing import Callable
 
 import torch
 
-from .patch import patch_swa
+from .patch import Config, patch
 
 
 @dataclass
@@ -110,7 +110,7 @@ def _benchmark(
     model.eval()
 
     if method == "swa":
-        model = patch_swa(model, window_size=window_size, num_sinks=num_sinks)
+        model = patch(model, Config(window=window_size, sink=num_sinks))
     elif method == "fa":
         pass  # default
     else:

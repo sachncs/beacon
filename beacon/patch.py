@@ -1,7 +1,7 @@
 """Core SWA-with-sinks attention mask and HF model patch.
 
 Implements SWA(w, s) as defined in Jolicoeur-Martineau et al. (2026):
-attend to the previous ``w`` tokens *and* the first ``s`` tokens (sinks).
+attend to the previous ``window`` tokens *and* the first ``sink`` tokens.
 
 The patch is model-agnostic: it works with any HuggingFace causal LM whose
 attention uses a 4-D additive mask (Llama, Mistral, Qwen2, Phi-3, Gemma, ...).
@@ -9,34 +9,32 @@ attention uses a 4-D additive mask (Llama, Mistral, Qwen2, Phi-3, Gemma, ...).
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn as nn
 
 
 @dataclass
-class SWAConfig:
+class Config:
     """Hyper-parameters of a SWA-with-sinks mask."""
 
-    window_size: int = 64
-    num_sinks: int = 4
+    window: int = 64
+    sink: int = 4
 
     def __post_init__(self) -> None:
-        if self.window_size <= 0:
-            raise ValueError(f"window_size must be > 0, got {self.window_size}")
-        if self.num_sinks < 0:
-            raise ValueError(f"num_sinks must be >= 0, got {self.num_sinks}")
+        if self.window <= 0:
+            raise ValueError(f"window must be > 0, got {self.window}")
+        if self.sink < 0:
+            raise ValueError(f"sink must be >= 0, got {self.sink}")
 
 
-def swa_mask(
+def mask(
     seq_q: int,
     seq_k: int,
     *,
-    window_size: int,
-    num_sinks: int,
+    window: int,
+    sink: int,
     device: torch.device | str = "cpu",
     dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
@@ -47,7 +45,7 @@ def swa_mask(
     seq_q, seq_k
         Query and key sequence lengths. ``seq_k >= seq_q``. When ``seq_q < seq_k``
         we are decoding: a single new query attends to ``seq_k`` past keys.
-    window_size, num_sinks
+    window, sink
         SWA hyperparameters (w, s).
     device, dtype
         Output device/dtype. Defaults are CPU + float32; callers typically cast.
@@ -63,49 +61,34 @@ def swa_mask(
     q = torch.arange(seq_q, device=device).view(-1, 1)
     k = torch.arange(seq_k, device=device).view(1, -1)
 
-    if seq_q == seq_k:
-        q_idx = q.expand(seq_q, seq_k)
-        k_idx = k.expand(seq_q, seq_k)
-        valid = (k_idx < num_sinks) | ((q_idx - k_idx >= 0) & (q_idx - k_idx < window_size))
-    else:
-        cache_len = seq_k - seq_q
-        q_idx = (cache_len + q).expand(seq_q, seq_k)
-        k_idx = k.expand(seq_q, seq_k)
-        valid = (k_idx < num_sinks) | ((q_idx - k_idx >= 0) & (q_idx - k_idx < window_size))
+    cache_len = seq_k - seq_q
+    q_idx = (cache_len + q).expand(seq_q, seq_k)
+    k_idx = k.expand(seq_q, seq_k)
+    valid = (k_idx < sink) | ((q_idx - k_idx >= 0) & (q_idx - k_idx < window))
 
-    mask = torch.zeros(seq_q, seq_k, device=device, dtype=dtype)
-    mask.masked_fill_(~valid, float("-inf"))
-    return mask.view(1, 1, seq_q, seq_k)
+    out = torch.zeros(seq_q, seq_k, device=device, dtype=dtype)
+    out.masked_fill_(~valid, float("-inf"))
+    return out.view(1, 1, seq_q, seq_k)
 
 
-def _make_swa_update_causal_mask(swa: SWAConfig):
+def make_update(cfg: Config):
     """Return a function suitable for monkey-patching ``PreTrainedModel._update_causal_mask``.
 
-    The returned function has the same signature as the upstream method but produces
-    a SWA-with-sinks mask instead of a full causal mask.
+    The closure has the same signature as the upstream method but produces a
+    SWA-with-sinks mask instead of a full causal mask.
     """
 
-    def _update_causal_mask(
-        self,
-        attention_mask,
-        input_tensor,
-        cache_position,
-        past_key_values_length,
-        *args,
-        **kwargs,
-    ):
-        # Always start from a causal-future mask: never let query i attend to key j > i.
-        # Then carve out the SWA window on top of that.
+    def update(self, attention_mask, input_tensor, cache_position, past_key_values_length, *args, **kwargs):
         dtype = input_tensor.dtype
         device = input_tensor.device
         seq_q = input_tensor.shape[1]
         seq_k = seq_q + (past_key_values_length or 0)
 
-        attn_mask = swa_mask(
+        attn_mask = mask(
             seq_q,
             seq_k,
-            window_size=swa.window_size,
-            num_sinks=swa.num_sinks,
+            window=cfg.window,
+            sink=cfg.sink,
             device=device,
             dtype=torch.float32,
         ).to(dtype)
@@ -121,75 +104,18 @@ def _make_swa_update_causal_mask(swa: SWAConfig):
 
         return attn_mask
 
-    return _update_causal_mask
+    return update
 
 
-class SWAPatchedModel(nn.Module):
-    """Wrapper that lazily swaps in the SWA mask on a loaded causal LM.
+def patch(model: nn.Module, cfg: Config) -> nn.Module:
+    """Replace ``model``'s attention mask with SWA(w, s).
 
-    The wrapper holds a reference to the underlying HF model and exposes the
-    standard ``generate`` / ``forward`` interface. No weights are modified.
+    Forces eager attention so the 4-D additive mask is honoured, then monkey-patches
+    the model's ``_update_causal_mask`` to emit our mask. Returns the same object.
     """
-
-    def __init__(self, model: nn.Module, swa: SWAConfig):
-        super().__init__()
-        self.model = model
-        self.swa = swa
-        self._patch_applied = False
-        self._apply_patch()
-
-    def _apply_patch(self) -> None:
-        if self._patch_applied:
-            return
-        # Force eager attention so our 4-D additive mask is actually used.
-        # SDPA / Flash kernels may or may not honour additive masks, depending on version.
-        if hasattr(self.model.config, "_attn_implementation"):
-            self.model.config._attn_implementation = "eager"
-        if hasattr(self.model, "config"):
-            self.model.config._attn_implementation = "eager"
-        # Monkey-patch the model's mask updater.
-        fn = _make_swa_update_causal_mask(self.swa)
-        self.model.__class__._update_causal_mask = fn
-        self._patch_applied = True
-
-    def forward(self, *args, **kwargs):
-        return self.model(*args, **kwargs)
-
-    def generate(self, *args, **kwargs):
-        return self.model.generate(*args, **kwargs)
-
-    def __getattr__(self, name: str):
-        # Delegate everything else (parameters, config, ...) to the wrapped model.
-        try:
-            return super().__getattr__(name)
-        except AttributeError:
-            return getattr(self.model, name)
+    model.config._attn_implementation = "eager"
+    model.__class__._update_causal_mask = make_update(cfg)
+    return model
 
 
-def patch_swa(model: nn.Module, *, window_size: int = 64, num_sinks: int = 4) -> SWAPatchedModel:
-    """Return a wrapper around ``model`` that uses SWA(w, s) attention.
-
-    Parameters
-    ----------
-    model
-        A loaded HuggingFace causal LM.
-    window_size
-        ``w``: how many previous tokens each query attends to.
-    num_sinks
-        ``s``: how many leading tokens are always attended to.
-
-    Returns
-    -------
-    SWAPatchedModel
-        Thin wrapper; drop-in replacement for the original module.
-    """
-    swa = SWAConfig(window_size=window_size, num_sinks=num_sinks)
-    return SWAPatchedModel(model, swa)
-
-
-__all__ = [
-    "SWAConfig",
-    "swa_mask",
-    "patch_swa",
-    "SWAPatchedModel",
-]
+__all__ = ["Config", "mask", "patch"]

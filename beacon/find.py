@@ -27,7 +27,7 @@ from typing import Callable
 
 import torch
 
-from .patch import patch_swa
+from .patch import Config, patch
 
 
 # Three S-NIAH variants used in the paper.
@@ -157,12 +157,13 @@ def run_niah(
     if variants is None:
         variants = ["1", "2", "3"]
 
+    cfg = Config(window=window_size, sink=num_sinks)
     torch_dtype = getattr(torch, dtype)
     tok = AutoTokenizer.from_pretrained(model_id)
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
     model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch_dtype)
-    model = patch_swa(model, window_size=window_size, num_sinks=num_sinks)
+    model = patch(model, cfg)
     model.eval()
 
     results: dict[tuple[str, int], float] = {}

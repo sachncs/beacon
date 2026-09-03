@@ -33,7 +33,7 @@ from typing import Iterable
 
 import torch
 
-from .patch import patch_swa
+from .patch import Config, patch
 
 
 # The six benchmarks from the paper's Table 2.
@@ -63,7 +63,7 @@ def _build_lm(model_id: str, window_size: int, num_sinks: int, dtype: str):
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
     model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch_dtype)
-    model = patch_swa(model, window_size=window_size, num_sinks=num_sinks)
+    model = patch(model, Config(window=window_size, sink=num_sinks))
     return HFLM(pretrained=model, tokenizer=tok, batch_size="auto:4")
 
 
