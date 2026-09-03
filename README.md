@@ -7,78 +7,133 @@ The paper's claim: a plain pretrained Transformer with its attention mask replac
 models on knowledge/reasoning benchmarks, and crushes them on long-context tasks — with
 zero post-training and lower memory.
 
-This repo gives you a model-agnostic drop-in patch plus the full evaluation suite used in
-the paper (Table 1–4, Figure 2).
+**beacon** = the SWA-with-sinks mechanism. Sink tokens act as beacons anchoring attention
+while the rest of the context scrolls past.
 
-## What's here
-
-| File | What it does |
-|------|--------------|
-| `beacon/patch.py`     | Core SWA-with-sinks mask + HF model patch |
-| `beacon/short.py`     | MMLU, ARC-C, ARC-E, HellaSwag, PIQA, WinoGrande (Table 2) |
-| `beacon/find.py`      | Single Needle-in-a-Haystack (Tables 3) |
-| `beacon/story.py`     | BABILong (Table 4) |
-| `beacon/speed.py`     | Throughput / KV-cache size vs context (Figure 2) |
-| `beacon/cli.py`       | Unified CLI (`beacon-eval`) |
-
-## Quick start
-
-Default model is **openbmb/MiniCPM5-1B** (1B, standard `LlamaForCausalLM`,
-GQA 16/2, 131K context — passes through the patch unchanged).
+## Install
 
 ```bash
 pip install -e ".[eval]"
+```
 
+## Layout
+
+```
+beacon/
+  __init__.py   # public API: Config, patch, mask, load
+  patch.py      # Config, mask(), patch()  — single file, the algorithm
+  load.py       # load(model, cfg) → (model, tokenizer)
+  sample.py     # Sample, filler, insert, contains
+  short.py      # Short dataclass + run() via lm-eval (Table 2)
+  find.py       # VARIANT registry + run() (S-NIAH, Table 3)
+  story.py      # TASK registry + run()  (BABILong, Table 4)
+  speed.py      # Method registry + run() + kv() (Figure 2)
+  cli.py        # beacon-eval: short / find / story / speed
+tests/
+  test_patch.py test_sample.py test_find.py
+  test_story.py test_speed.py test_cli.py
+```
+
+## Quick start
+
+Default model: **`openbmb/MiniCPM5-1B`** — a standard `LlamaForCausalLM` (GQA 16/2, 24 layers,
+131K context). Override via the `BEACON_MODEL` env var or `--model` flag.
+
+```bash
 # short-context eval (Table 2)
 python -m beacon.cli short --model openbmb/MiniCPM5-1B \
-    --window 64 --sinks 4 --tasks mmlu,arc_easy,hellaswag,piqa,winogrande
+    --window 64 --sink 4 --task mmlu,arc_easy,hellaswag,piqa,winogrande
 
-# long-context eval (Tables 3-4)
+# Single Needle-in-a-Haystack (Table 3)
 python -m beacon.cli find --model openbmb/MiniCPM5-1B \
-    --window 256 --sinks 4
+    --window 256 --sink 4 --variant 1,2,3
 
+# BABILong (Table 4)
 python -m beacon.cli story --model openbmb/MiniCPM5-1B \
-    --window 256 --sinks 4
+    --window 256 --sink 4 --task 1,2,3,4,5
 
-# speed/memory benchmark (Figure 2)
+# Speed / KV-cache memory (Figure 2)
 python -m beacon.cli speed --model openbmb/MiniCPM5-1B \
-    --window 64 --sinks 4
+    --window 64 --sink 4 --method fa,swa
 ```
 
 ## Using the patch directly
 
 ```python
-from beacon import patch_swa
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from beacon import Config, patch, load
 
-model = AutoModelForCausalLM.from_pretrained("openbmb/MiniCPM5-1B")
-model = patch_swa(model, window_size=64, num_sinks=4)
-# model now uses SWA(64, 4) at every forward pass. No retraining.
+model, tok = load("openbmb/MiniCPM5-1B", Config(window=64, sink=4))
+# model is already patched and in eval mode.
 ```
 
 ### MiniCPM5 chat template
 
-MiniCPM5 ships a chat template with `enable_thinking`. For instruction-style
-evaluation, set it before tokenising the prompt:
-
 ```python
-tok = AutoTokenizer.from_pretrained("openbmb/MiniCPM5-1B")
 prompt = tok.apply_chat_template(
     [{"role": "user", "content": "..."}],
     tokenize=False, add_generation_prompt=True, enable_thinking=False,
 )
 ```
 
+## Extension points
+
+Every polymorphism registry is a plain Python dict — add a new variant / task /
+method by adding one entry:
+
+```python
+# Add a new NIAH variant
+from beacon.find import VARIANT
+def v4(rng): ...  # returns (needle, question, answer)
+VARIANT["4"] = v4
+
+# Add a new bAbI task
+from beacon.story import TASK
+def qa6(rng): ...
+TASK[6] = qa6
+
+# Add a new attention method (e.g. custom kernel)
+from beacon.speed import METHOD, Method
+def my_linear(model, cfg): ...
+METHOD["linear"] = Method("linear", my_linear)
+```
+
+## Design principles
+
+- **Public API is tiny.** `Config`, `mask`, `patch`, `load`. Plus the per-module
+  `run` functions and strategy registries (`VARIANT`, `TASK`, `METHOD`).
+- **Single-word naming everywhere.** No `_helper`, no `window_size`, no
+  `_make_something`. Each name says what it is.
+- **Polymorphism via registries, not class hierarchies.** Real behavioural
+  variation lives in `dict`s of callables.
+- **Frozen dataclasses for configurations.** `Short`, `Config` are immutable
+  by default.
+- **Determinism.** Every RNG-taking function takes an explicit `seed`. The
+  speed bench uses `torch.manual_seed(seed)` for reproducible random inputs.
+
+## CLI flags (single-word)
+
+```
+short : --model --window --sink --task --batch --shot --limit --dtype --out
+find  : --model --window --sink --ctx --variant --frac --max --seed --n --dtype --out
+story : --model --window --sink --ctx --task --frac --max --seed --n --dtype --out
+speed : --model --window --sink --ctx --method --step --seed --dtype --out
+```
+
+## Tests
+
+```bash
+PYTHONPATH=. python -m pytest tests/ -q
+# 45 passed
+```
+
 ## Paper-vs-ours differences
 
-- **Default model**: `openbmb/MiniCPM5-1B` — a standard `LlamaForCausalLM`, so the
-  SWA patch is drop-in. Pass `--model` to swap (e.g. `Qwen/Qwen2.5-1.5B-Instruct`,
-  `meta-llama/Llama-3.1-8B`).
-- **Hardware**: tested on Apple Silicon and CUDA. Speed benchmarks use the requested
-  RTX PRO 6000 spec where available, fall back to local device otherwise.
+- **Default model**: `openbmb/MiniCPM5-1B` (matches the paper's LlamaForCausalLM
+  architectural profile, including GQA).
+- **Hardware**: tested on Apple Silicon and CUDA. Speed benchmarks target the
+  paper's RTX PRO 6000 spec where available; otherwise fall back to local device.
 - **BABILong**: reimplemented from scratch (no `babilong` PyPI dep) — generators
-  reproduce the same story structure used in BABILong, but PG-essay filler is
-  replaced with synthetic filler.
+  reproduce the same story structure; filler text is synthetic instead of PG essays.
 
 ## Citation
 
