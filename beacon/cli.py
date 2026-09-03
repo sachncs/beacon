@@ -6,6 +6,9 @@ Subcommands:
 * ``find``   — Table 3  (Single Needle-in-a-Haystack)
 * ``story``  — Table 4  (BABILong)
 * ``speed``  — Figure 2 (throughput / KV-cache memory)
+
+Each subcommand dispatches to a per-module ``run(...)`` function with a
+single config dataclass. No ``_run`` glue, no ``flag_to_key`` mapping.
 """
 
 from __future__ import annotations
@@ -13,9 +16,81 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path
 
 
 DEFAULT_MODEL = os.environ.get("BEACON_MODEL", "openbmb/MiniCPM5-1B")
+
+
+def _build_short(args) -> None:
+    from .short import Short, run
+
+    s = Short(
+        model=args.model,
+        cfg=_cfg(args),
+        task=tuple(t.strip() for t in args.task.split(",") if t.strip()),
+        batch=args.batch,
+        shot=args.shot,
+        limit=args.limit,
+        dtype=args.dtype,
+        out=Path(args.out) if args.out else None,
+    )
+    import json
+    print(json.dumps(run(s), indent=2))
+
+
+def _build_find(args) -> None:
+    from .find import run
+
+    run(
+        model=args.model,
+        cfg=_cfg(args),
+        ctx=[int(x) for x in args.ctx.split(",")],
+        variant=[x.strip() for x in args.variant.split(",") if x],
+        frac=[float(x) for x in args.frac.split(",") if x],
+        max=args.max,
+        seed=args.seed,
+        n=args.n,
+        dtype=args.dtype,
+        out=Path(args.out) if args.out else None,
+    )
+
+
+def _build_story(args) -> None:
+    from .story import run
+
+    run(
+        model=args.model,
+        cfg=_cfg(args),
+        ctx=[int(x) for x in args.ctx.split(",")],
+        task=[int(x) for x in args.task.split(",")],
+        frac=[float(x) for x in args.frac.split(",") if x],
+        max=args.max,
+        seed=args.seed,
+        n=args.n,
+        dtype=args.dtype,
+        out=Path(args.out) if args.out else None,
+    )
+
+
+def _build_speed(args) -> None:
+    from .speed import run_speed_mem
+
+    run_speed_mem(
+        model_id=args.model,
+        window_size=args.window,
+        num_sinks=args.sinks,
+        context_lens=[int(x) for x in args.ctxs.split(",")],
+        decode_steps=args.decode_steps,
+        methods=[x.strip() for x in args.methods.split(",") if x],
+        dtype=args.dtype,
+        out=Path(args.out) if args.out else None,
+    )
+
+
+def _cfg(args):
+    from .patch import Config
+    return Config(window=args.window, sink=args.sink)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -26,10 +101,10 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("short", help="short-context benchmarks (Table 2)")
     p.add_argument("--model", default=DEFAULT_MODEL)
     p.add_argument("--window", type=int, default=64)
-    p.add_argument("--sinks", type=int, default=4)
-    p.add_argument("--tasks", default="mmlu,arc_challenge,arc_easy,hellaswag,piqa,winogrande")
-    p.add_argument("--batch-size", default="auto:4")
-    p.add_argument("--num-fewshot", type=int, default=None)
+    p.add_argument("--sink", type=int, default=4)
+    p.add_argument("--task", default="mmlu,arc_challenge,arc_easy,hellaswag,piqa,winogrande")
+    p.add_argument("--batch", default="auto:4")
+    p.add_argument("--shot", type=int, default=None)
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--dtype", default="float16")
     p.add_argument("--out", type=str, default=None)
@@ -48,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--dtype", default="float16")
     p.add_argument("--out", type=str, default=None)
 
-    # story (babilong)
+    # story (BABILong)
     p = sub.add_parser("story", help="BABILong (Table 4)")
     p.add_argument("--model", default=DEFAULT_MODEL)
     p.add_argument("--window", type=int, default=256)
@@ -68,127 +143,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--window", type=int, default=64)
     p.add_argument("--sinks", type=int, default=4)
     p.add_argument("--ctxs", default="128,256,512,1024,2048,4096,8192,16384,65536")
-    p.add_argument("--decode-steps", type=int, default=64)
     p.add_argument("--methods", default="fa,swa")
+    p.add_argument("--decode-steps", type=int, default=64)
     p.add_argument("--dtype", default="float16")
     p.add_argument("--out", type=str, default=None)
 
     args = parser.parse_args(argv)
-
-    if args.cmd == "short":
-        from .short import run_short_eval
-
-        return _run(run_short_eval, args, [
-            "model_id", "window_size", "num_sinks", "tasks",
-            "batch_size", "num_fewshot", "limit", "dtype",
-        ], out=getattr(args, "out", None))
-
-    if args.cmd == "find":
-        from .find import run as run_find
-        from .patch import Config
-
-        return _run(run_find, args, [
-            "model", "cfg",
-            "ctx", "variant", "frac", "max", "seed", "n", "dtype",
-        ], out=getattr(args, "out", None))
-
-    if args.cmd == "story":
-        from .story import run as run_story
-        from .patch import Config
-
-        return _run(run_story, args, [
-            "model", "cfg",
-            "ctx", "task", "frac", "max", "seed", "n", "dtype",
-        ], out=getattr(args, "out", None))
-
-    if args.cmd == "speed":
-        from .speed import run_speed_mem
-
-        from pathlib import Path
-        kwargs = dict(
-            model_id=args.model,
-            window_size=args.window,
-            num_sinks=args.sinks,
-            context_lens=[int(x) for x in args.ctxs.split(",")],
-            decode_steps=args.decode_steps,
-            methods=[x.strip() for x in args.methods.split(",") if x],
-            dtype=args.dtype,
-        )
-        if args.out:
-            kwargs["out"] = Path(args.out)
-        run_speed_mem(**kwargs)
-        return 0
-
-    parser.error(f"unknown subcommand: {args.cmd}")
-    return 2
-
-
-def _run(fn, args, keys, out=None):
-    from pathlib import Path
-    from .patch import Config
-
-    # The find and story subcommands take a Config object; build it from flags.
-    if args.cmd in ("find", "story"):
-        ctx = [int(x) for x in args.ctx.split(",")]
-        frac = [float(x) for x in args.frac.split(",") if x]
-        if args.cmd == "find":
-            kwargs = {
-                "model": args.model,
-                "cfg": Config(window=args.window, sink=args.sink),
-                "ctx": ctx,
-                "variant": [x.strip() for x in args.variant.split(",") if x],
-                "frac": frac,
-                "max": args.max,
-                "seed": args.seed,
-                "n": args.n,
-                "dtype": args.dtype,
-            }
-        else:  # story
-            kwargs = {
-                "model": args.model,
-                "cfg": Config(window=args.window, sink=args.sink),
-                "ctx": ctx,
-                "task": [int(x) for x in args.task.split(",")],
-                "frac": frac,
-                "max": args.max,
-                "seed": args.seed,
-                "n": args.n,
-                "dtype": args.dtype,
-            }
-        if args.out:
-            kwargs["out"] = Path(args.out)
-        fn(**kwargs)
-        return 0
-
-    kwargs = {
-        "model_id": args.model,
-        "window_size": args.window,
-        "num_sinks": args.sinks,
+    dispatch = {
+        "short": _build_short,
+        "find": _build_find,
+        "story": _build_story,
+        "speed": _build_speed,
     }
-    # Map CLI flag names to function parameter names.
-    flag_to_key = {
-        "tasks": "tasks",
-        "batch_size": "batch_size",
-        "num_fewshot": "num_fewshot",
-        "limit": "limit",
-        "ctxs": "context_lens",
-        "variants": "variants",
-        "max_new": "max_new_tokens",
-        "dtype": "dtype",
-        "ctx_words": "context_word_lens",
-        "qa_ids": "qa_ids",
-    }
-    for cli_name, fn_name in flag_to_key.items():
-        if fn_name in keys and hasattr(args, cli_name):
-            v = getattr(args, cli_name)
-            if isinstance(v, str) and "," in v and fn_name in {
-                "tasks", "variants", "qa_ids", "context_lens", "context_word_lens",
-            }:
-                v = [x.strip() for x in v.split(",") if x]
-            kwargs[fn_name] = v
-    if out:
-        kwargs["output_path"] = Path(out)
-    fn(**kwargs)
+    dispatch[args.cmd](args)
     return 0
 
 
