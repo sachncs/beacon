@@ -22,6 +22,7 @@ import random
 import string
 from collections import defaultdict
 from pathlib import Path
+from typing import Callable, Sequence
 
 import torch
 
@@ -29,6 +30,9 @@ from .load import load
 from .patch import Config
 from .sample import Sample, contains, filler, insert
 from .seed import seeded_rng
+
+
+VariantFn = Callable[[random.Random], tuple[str, str, str]]
 
 
 # V1: constant needle / question / answer.
@@ -61,13 +65,13 @@ def v3(rng: random.Random) -> tuple[str, str, str]:
     )
 
 
-VARIANT: dict[str, callable] = {"1": v1, "2": v2, "3": v3}
+VARIANT: dict[str, VariantFn] = {"1": v1, "2": v2, "3": v3}
 
 
 def samples(
     *,
     ctx: list[int],
-    frac: list[float] | None = None,
+    frac: Sequence[float] | None = None,
     variant: str = "1",
     seed: int = 0,
     n: int = 1,
@@ -97,8 +101,8 @@ def run(
     model: str,
     cfg: Config,
     ctx: list[int],
-    variant: list[str] | None = None,
-    frac: list[float] | None = None,
+    variant: Sequence[str] | None = None,
+    frac: Sequence[float] | None = None,
     max_new_tokens: int = 32,
     seed: int = 0,
     n: int = 1,

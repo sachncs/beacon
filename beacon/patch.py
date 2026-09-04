@@ -19,11 +19,13 @@ from __future__ import annotations
 import importlib
 import functools
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, TypeVar
 
 import torch
 import torch.nn as nn
 from transformers import PreTrainedModel, __version__, masking_utils
+
+T = TypeVar("T", bound=PreTrainedModel)
 
 MIN_TRANSFORMERS = (4, 55)
 
@@ -248,7 +250,7 @@ def check_transformers_version() -> None:
         )
 
 
-def patch(model: nn.Module, cfg: Config) -> nn.Module:
+def patch(model: T, cfg: Config) -> T:
     """Make ``model`` attend with SWA-with-sinks instead of full causal attention.
 
     - Validates that the model and transformers version are supported; raises an

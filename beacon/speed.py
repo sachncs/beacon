@@ -27,13 +27,17 @@ import json
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Callable
 
 import torch
-from transformers import AutoModelForCausalLM, DynamicCache
+from transformers import AutoModelForCausalLM, DynamicCache, PreTrainedModel
 
 from .load import _coerce_dtype
 from .patch import Config, patch
 from .seed import seed_all
+
+
+MethodFn = Callable[[PreTrainedModel, Config], PreTrainedModel]
 
 
 @dataclass(frozen=True)
@@ -52,15 +56,15 @@ class Method:
     """An attention strategy: a name plus a callable that wraps a model."""
 
     name: str
-    apply: callable
+    apply: MethodFn
 
 
-def fa(model, _cfg) -> torch.nn.Module:
+def fa(model: PreTrainedModel, cfg: Config) -> PreTrainedModel:
     """Full causal attention — pass-through."""
     return model
 
 
-def swa(model, cfg: Config) -> torch.nn.Module:
+def swa(model: PreTrainedModel, cfg: Config) -> PreTrainedModel:
     """Sliding Window Attention with sinks."""
     return patch(model, cfg)
 
@@ -132,12 +136,18 @@ def bench(
     dev = torch.device(device)
     torch_dtype = _coerce_dtype(dtype)
 
-    model = AutoModelForCausalLM.from_pretrained(
+    loader: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
         model_id, torch_dtype=torch_dtype
-    ).to(dev)
+    )
+    # PreTrainedModel.to is mis-typed upstream (expects a model positional);
+    # call through the correctly-typed nn.Module.to instead.
+    module: torch.nn.Module = loader
+    module.to(dev)
+    model: PreTrainedModel = loader
 
     model.eval()
-    model = METHOD[method].apply(model, cfg)
+    applied: PreTrainedModel = METHOD[method].apply(model, cfg)
+    model = applied
 
     seed_all(seed)
     gen = torch.Generator(device=dev)

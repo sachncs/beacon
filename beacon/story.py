@@ -25,6 +25,7 @@ import json
 import random
 from collections import defaultdict
 from pathlib import Path
+from typing import Callable
 
 import torch
 
@@ -32,6 +33,9 @@ from .load import load
 from .patch import Config
 from .sample import Sample, contains, filler
 from .seed import seeded_rng
+
+
+TaskFn = Callable[[random.Random], tuple[str, str, str]]
 
 
 NAMES = [
@@ -96,7 +100,7 @@ def qa5(rng: random.Random) -> tuple[str, str, str]:
     )
 
 
-TASK: dict[int, callable] = {1: qa1, 2: qa2, 3: qa3, 4: qa4, 5: qa5}
+TASK: dict[int, TaskFn] = {1: qa1, 2: qa2, 3: qa3, 4: qa4, 5: qa5}
 
 
 def samples(
