@@ -142,9 +142,16 @@ def run(
     seed: int = 0,
     n: int = 3,
     dtype: torch.dtype | str = torch.float16,
+    max_ctx: int | None = None,
     out: Path | None = None,
 ) -> dict[int, dict[int, float]]:
-    """Run BABILong. Returns ``{ctx: {task: acc}}``."""
+    """Run BABILong. Returns ``{ctx: {task: acc}}``.
+
+    ``max_ctx`` bounds the token length of each input prompt. When ``None``
+    prompts are not truncated at all. When set, prompts longer than ``max_ctx``
+    tokens are truncated (which may clip the question or answer — use it
+    deliberately, e.g. to fit a fixed context window).
+    """
     if task is None:
         task = list(TASK)
 
@@ -155,7 +162,12 @@ def run(
 
     cell = samples(task=task, ctx=ctx, frac=frac, seed=seed, n=n)
     for s in cell:
-        ids = tok(s.prompt, return_tensors="pt", truncation=True, max_length=8192).input_ids.to(m.device)
+        if max_ctx is None:
+            ids = tok(s.prompt, return_tensors="pt").input_ids.to(m.device)
+        else:
+            ids = tok(
+                s.prompt, return_tensors="pt", truncation=True, max_length=max_ctx
+            ).input_ids.to(m.device)
         with torch.no_grad():
             out_ids = m.generate(
                 ids,
@@ -195,6 +207,7 @@ def cli(argv: list[str] | None = None) -> int:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--n", type=int, default=3)
     p.add_argument("--dtype", default="float16")
+    p.add_argument("--max-ctx", type=int, default=None)
     p.add_argument("--out", type=Path, default=None)
     args = p.parse_args(argv)
 
@@ -208,6 +221,7 @@ def cli(argv: list[str] | None = None) -> int:
         seed=args.seed,
         n=args.n,
         dtype=args.dtype,
+        max_ctx=args.max_ctx,
         out=args.out,
     )
     return 0
