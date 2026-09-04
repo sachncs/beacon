@@ -162,6 +162,171 @@ def test_patch_is_idempotent():
     assert out.logits.shape == (1, 4, config.vocab_size)
 
 
+def attended_mask(model, ids, **forward_kwargs):
+    """The ``(B, 1, Q, KV)`` additive attention mask ``model`` used during forward.
+
+    ``patch`` installs the SWA builder as the ``create_causal_mask`` of the
+    model's own architecture module (``beacon.patch.swa_create_causal_mask``), so
+    this wraps that installed builder to capture its output while the model runs,
+    then restores it. ``0.0`` marks an attended token; the eager backend masks
+    non-attended tokens with ``torch.finfo(dtype).min`` (a finite, very-negative
+    value), so callers compare to ``0.0``.
+    """
+    import warnings
+
+    from beacon.patch import architecture_module
+
+    module = architecture_module(model)
+    installed = module.create_causal_mask
+    captured = {}
+
+    def wrapping(*args, **kwargs):
+        mask_tensor = installed(*args, **kwargs)
+        if mask_tensor is not None:
+            captured["mask"] = mask_tensor
+        return mask_tensor
+
+    module.create_causal_mask = wrapping
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            with torch.no_grad():
+                model(input_ids=ids, **forward_kwargs)
+    finally:
+        module.create_causal_mask = installed
+    return captured["mask"]
+
+
+def test_patch_applies_swa_mask_not_full_causal():
+    """REGRESSION (flagship): the patch must change the model's actual attention mask.
+
+    Before the create_causal_mask rewrite this test failed: the old patch set
+    ``_update_causal_mask``, which no modern transformers calls, so the model kept
+    full causal attention. This asserts the model really attends with
+    sinks + sliding window, not full causal.
+    """
+    from transformers import AutoConfig, AutoModelForCausalLM
+
+    config = AutoConfig.from_pretrained(
+        "hf-internal-testing/tiny-random-LlamaForCausalLM",
+        num_hidden_layers=1,
+    )
+    model = AutoModelForCausalLM.from_config(config)
+    model.eval()
+    window, sink = 4, 2
+    patch(model, Config(window=window, sink=sink))
+
+    seq = 16
+    ids = torch.randint(0, config.vocab_size, (1, seq))
+    amask = attended_mask(model, ids)
+    assert amask.shape == (1, 1, seq, seq)
+
+    attend = amask[0, 0] == 0.0
+    last = seq - 1
+    # full causal would give all `seq` entries; SWA(w,s) gives sink + window.
+    assert int(attend[last].sum()) == sink + window, attend[last].int().tolist()
+    # every row attends to all sink tokens.
+    assert bool(attend[:, :sink].all())
+    # no row attends to a future token outside the sink region (sinks are global).
+    future = torch.triu(torch.ones(seq, seq, dtype=torch.bool), diagonal=1)
+    future_non_sink = future.clone()
+    future_non_sink[:, :sink] = False
+    assert not bool(attend[future_non_sink].any())
+
+
+def test_patch_cross_instance_independence():
+    """Two patched models of the same architecture use their own Config, not the last patch."""
+    from transformers import AutoConfig, AutoModelForCausalLM
+
+    config = AutoConfig.from_pretrained(
+        "hf-internal-testing/tiny-random-LlamaForCausalLM",
+        num_hidden_layers=1,
+    )
+
+    def fresh_model():
+        c = AutoConfig.from_pretrained(
+            "hf-internal-testing/tiny-random-LlamaForCausalLM", num_hidden_layers=1
+        )
+        return AutoModelForCausalLM.from_config(c).eval()
+
+    m1, m2 = fresh_model(), fresh_model()
+    patch(m1, Config(window=4, sink=2))
+    patch(m2, Config(window=8, sink=1))
+
+    seq = 12
+    ids = torch.randint(0, config.vocab_size, (1, seq))
+    a1 = attended_mask(m1, ids)[0, 0, seq - 1] == 0.0
+    a2 = attended_mask(m2, ids)[0, 0, seq - 1] == 0.0
+    assert int(a1.sum()) == 2 + 4  # sink=2, window=4
+    assert int(a2.sum()) == 1 + 8  # sink=1, window=8
+
+
+def test_patch_decode_mask_uses_window_relative_to_cache():
+    """During decode the last query attends to sinks + the trailing window of keys."""
+    from transformers import AutoConfig, AutoModelForCausalLM, DynamicCache
+
+    config = AutoConfig.from_pretrained(
+        "hf-internal-testing/tiny-random-LlamaForCausalLM",
+        num_hidden_layers=1,
+    )
+    model = AutoModelForCausalLM.from_config(config).eval()
+    window, sink = 4, 2
+    patch(model, Config(window=window, sink=sink))
+
+    prefill = torch.randint(0, config.vocab_size, (1, 10))
+    cache = DynamicCache()
+    with torch.no_grad():
+        model(input_ids=prefill, past_key_values=cache, use_cache=True)
+    amask = attended_mask(model, prefill[:, -1:], past_key_values=cache, use_cache=True)
+    # one new query over the 10 cached keys.
+    assert amask.shape == (1, 1, 1, 11)
+    attend = amask[0, 0, 0] == 0.0
+    assert int(attend.sum()) == sink + window
+
+
+def test_mask_edge_cases():
+    w, s = 3, 1
+    assert mask(0, 0, window=w, sink=s).shape == (1, 1, 0, 0)  # empty prefill
+    # window >= seq_k degenerates to causal union the global sink columns.
+    m = mask(5, 5, window=10, sink=2)
+    q = torch.arange(5).view(-1, 1)
+    k = torch.arange(5).view(1, -1)
+    expect = (k <= q) | (k < 2)
+    assert torch.equal(torch.isfinite(m).view(5, 5), expect)
+    # sink == seq_k covers everything.
+    m = mask(3, 3, window=1, sink=3)
+    assert torch.equal(torch.isfinite(m).view(3, 3), torch.ones(3, 3, dtype=torch.bool))
+    # sink == 0 and window == 1 -> only the diagonal is attended.
+    m = mask(4, 4, window=1, sink=0)
+    expect = torch.eye(4, dtype=torch.bool)
+    assert torch.equal(torch.isfinite(m).view(4, 4), expect)
+
+
+def test_mask_sink_overflow_edge():
+    # sink larger than the key length is safe (masks everything a query can reach).
+    m = mask(2, 2, window=1, sink=5)
+    assert torch.equal(torch.isfinite(m).view(2, 2), torch.ones(2, 2, dtype=torch.bool))
+
+
+def test_patch_forces_eager_and_stamps_config():
+    from transformers import AutoConfig, AutoModelForCausalLM
+
+    config = AutoConfig.from_pretrained(
+        "hf-internal-testing/tiny-random-LlamaForCausalLM",
+        num_hidden_layers=1,
+    )
+    model = AutoModelForCausalLM.from_config(config)
+    model.eval()
+    patch(model, Config(window=8, sink=3))
+    assert model.config._attn_implementation == "eager"
+    assert model.config._beacon == {
+        "window": 8,
+        "sink": 3,
+        "applied": True,
+        "transformers_version": model.config._beacon["transformers_version"],
+    }
+
+
 if __name__ == "__main__":
     test_mask_shape_and_dtype()
     test_prefill_attends_to_sinks_and_window()
