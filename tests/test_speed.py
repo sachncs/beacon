@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from beacon.patch import Config  # noqa: E402
-from beacon.speed import METHOD, Method, fa, kv, swa  # noqa: E402
+from beacon.speed import METHOD, Method, fa, kv, kv_swa, swa  # noqa: E402
 
 
 def test_method_registry_has_fa_and_swa():
@@ -53,6 +53,25 @@ def test_kv_matches_analytic_formula():
     assert abs(kv(model, 128) - expected) < 1e-9
     # Doubling the sequence length should double the KV-cache memory.
     assert abs(kv(model, 256) - 2 * expected) < 1e-9
+
+
+def test_kv_swa_is_bounded_by_window_plus_sink():
+    from transformers import AutoConfig, AutoModelForCausalLM
+
+    config = AutoConfig.from_pretrained(
+        "hf-internal-testing/tiny-random-LlamaForCausalLM",
+        num_hidden_layers=2,
+    )
+    model = AutoModelForCausalLM.from_config(config)
+
+    bytes_per = torch.tensor([], dtype=torch.float32).element_size()
+    cfg = Config(window=64, sink=4)
+    expected = 2 * 2 * (64 + 4) * config.hidden_size * bytes_per / (1024 * 1024)
+    assert abs(kv_swa(model, cfg) - expected) < 1e-9
+    # SWA memory is independent of seq_len: a bigger window is the only driver.
+    big = Config(window=256, sink=4)
+    assert kv_swa(model, big) > kv_swa(model, cfg)
+    assert abs(kv_swa(model, cfg) - kv_swa(model, Config(64, 4))) < 1e-12
 
 
 def test_unknown_method_in_bench_raises():

@@ -32,6 +32,7 @@ from pathlib import Path
 import torch
 
 from .patch import Config
+from .seed import seed_all
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,28 @@ def kv(model, seq_len: int) -> float:
     return size_bytes / (1024 * 1024)
 
 
+def kv_swa(model, cfg: Config) -> float:
+    """Steady-state KV-cache memory in MiB for SWA-with-sinks.
+
+    Unlike full causal attention, a sliding window never needs to attend to the
+    whole history: each layer only ever materializes K/V for the ``window``
+    recent positions plus the ``sink`` tokens. So the steady-state memory is
+    bounded and independent of ``seq_len``.
+
+    ``2 (K+V) * num_layers * (window + sink) * hidden * dtype_bytes``.
+    """
+    params = model.parameters()
+    bytes_per = torch.tensor([], dtype=next(params).dtype).element_size()
+    size_bytes = (
+        2
+        * model.config.num_hidden_layers
+        * (cfg.window + cfg.sink)
+        * model.config.hidden_size
+        * bytes_per
+    )
+    return size_bytes / (1024 * 1024)
+
+
 def bench(
     *,
     model_id: str,
@@ -92,8 +115,14 @@ def bench(
     device: str | None = None,
     seed: int = 0,
 ) -> list[Bench]:
-    """Run one method across the ctx grid."""
-    from transformers import AutoConfig, AutoModelForCausalLM
+    """Run one method across the ctx grid.
+
+    Each ``ctx = c`` cell measures **steady-state decode**: the model prefills
+    ``c`` tokens once (untimed) into a ``DynamicCache``, then the timed loop
+    decodes ``step`` single tokens against that cache. No ``torch.cat`` grows
+    inside the timed region, and ``kv_mib`` is reported at the prefill length.
+    """
+    from transformers import AutoConfig, AutoModelForCausalLM, DynamicCache
 
     if method not in METHOD:
         raise ValueError(f"unknown method: {method!r}; choose from {list(METHOD)}")
@@ -119,31 +148,46 @@ def bench(
     model.eval()
     model = METHOD[method].apply(model, cfg)
 
+    seed_all(seed)
+    gen = torch.Generator(device=dev)
+    gen.manual_seed(seed)
+
     rows: list[Bench] = []
-    torch.manual_seed(seed)
     for c in ctx:
-        ids = torch.randint(low=0, high=model.config.vocab_size, size=(1, c), device=dev, dtype=torch.long)
+        ids = torch.randint(
+            low=0, high=model.config.vocab_size, size=(1, c), device=dev, dtype=torch.long, generator=gen
+        )
+        cache = DynamicCache()
         with torch.no_grad():
-            _ = model(input_ids=ids)  # warmup prefill (not timed)
+            _ = model(input_ids=ids, past_key_values=cache, use_cache=True)  # warmup prefill (not timed)
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.reset_peak_memory_stats()
             torch.cuda.synchronize()
 
+        # Steady-state decode: feed one new token per step against the prefill
+        # cache; transformers appends it at the next absolute position. No
+        # torch.cat grows in the timed region and the attention window stays
+        # bounded for SWA.
         t0 = time.perf_counter()
         with torch.no_grad():
             for _ in range(step):
-                out = model(input_ids=ids[:, -1:])
-                next_id = out.logits[:, -1].argmax(dim=-1, keepdim=True)
-                ids = torch.cat([ids, next_id], dim=1)
+                next_tok = torch.randint(
+                    low=0, high=model.config.vocab_size, size=(1, 1), device=dev, dtype=torch.long, generator=gen
+                )
+                out = model(
+                    input_ids=next_tok,
+                    past_key_values=cache,
+                    use_cache=True,
+                )
         if torch.cuda.is_available():
             torch.cuda.synchronize()
 
         elapsed = time.perf_counter() - t0
         tps = step / max(elapsed, 1e-9)
         latency_ms = (elapsed / step) * 1000.0
-        kv_mib = kv(model, ids.shape[1])
+        kv_mib = kv_swa(model, cfg) if method == "swa" else kv(model, c)
         rows.append(Bench(method=method, ctx=c, tps=tps, kv_mib=kv_mib, latency=latency_ms))
         print(f"{method} ctx={c:>6d}  tps={tps:7.1f}  latency={latency_ms:6.2f}ms  KV={kv_mib:7.2f} MiB")
     return rows
@@ -209,7 +253,7 @@ def cli(argv: list[str] | None = None) -> int:
     return 0
 
 
-__all__ = ["Bench", "Method", "METHOD", "kv", "bench", "run", "cli"]
+__all__ = ["Bench", "Method", "METHOD", "kv", "kv_swa", "bench", "run", "cli"]
 
 
 if __name__ == "__main__":
