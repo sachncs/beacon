@@ -19,7 +19,6 @@ import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 
 DEFAULT_MODEL = os.environ.get("BEACON_MODEL", "openbmb/MiniCPM5-1B")

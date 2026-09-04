@@ -175,7 +175,7 @@ def bench(
                 next_tok = torch.randint(
                     low=0, high=model.config.vocab_size, size=(1, 1), device=dev, dtype=torch.long, generator=gen
                 )
-                out = model(
+                _ = model(
                     input_ids=next_tok,
                     past_key_values=cache,
                     use_cache=True,
