@@ -44,7 +44,7 @@ class Short:
     cfg: Config
     task: tuple[str, ...] = DEFAULT_TASK
     batch: str = "auto:4"
-    shot: int | None = None
+    shot: int = 5
     limit: int | None = None
     dtype: torch.dtype | str = torch.float16
     out: Path | None = None
@@ -103,7 +103,7 @@ def cli(argv: list[str] | None = None) -> int:
     p.add_argument("--sink", type=int, default=4)
     p.add_argument("--task", default=",".join(DEFAULT_TASK))
     p.add_argument("--batch", default="auto:4")
-    p.add_argument("--shot", type=int, default=None)
+    p.add_argument("--shot", type=int, default=5)
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--dtype", default="float16")
     p.add_argument("--out", type=Path, default=None)
