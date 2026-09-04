@@ -17,6 +17,28 @@ import torch
 
 from .patch import Config, patch
 
+_DTYPE_ALIASES = {
+    "float16": torch.float16,
+    "half": torch.float16,
+    "bfloat16": torch.bfloat16,
+    "float32": torch.float32,
+    "float": torch.float32,
+    "float64": torch.float64,
+    "double": torch.float64,
+}
+
+
+def _coerce_dtype(dtype: torch.dtype | str) -> torch.dtype:
+    if isinstance(dtype, torch.dtype):
+        return dtype
+    if not isinstance(dtype, str):
+        raise TypeError(f"dtype must be a torch.dtype or string, got {type(dtype).__name__}")
+    if dtype not in _DTYPE_ALIASES:
+        raise ValueError(
+            f"unknown dtype {dtype!r}; expected one of {sorted(_DTYPE_ALIASES)}"
+        )
+    return _DTYPE_ALIASES[dtype]
+
 
 def load(
     model: str,
@@ -33,7 +55,8 @@ def load(
     cfg
         SWA hyperparameters. Defaults to ``Config()``.
     dtype
-        ``torch.dtype`` or string name (``"float16"``, ``"bfloat16"``).
+        ``torch.dtype`` or string name (``"float16"``, ``"bfloat16"``,
+        ``"float32"``, ``"float64"``). Raises ``ValueError`` for unknown names.
 
     Returns
     -------
@@ -45,8 +68,7 @@ def load(
 
     if cfg is None:
         cfg = Config()
-    if isinstance(dtype, str):
-        dtype = getattr(torch, dtype)
+    dtype = _coerce_dtype(dtype)
 
     tok = AutoTokenizer.from_pretrained(model)
     if tok.pad_token is None:
