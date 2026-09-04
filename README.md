@@ -29,7 +29,7 @@ beacon/
   find.py       # VARIANT registry + run() (S-NIAH, Table 3)
   story.py      # TASK registry + run()  (BABILong, Table 4)
   speed.py      # Method registry + run() + kv()/kv_swa() (Figure 2)
-  cli.py        # beacon-eval: short / find / story / speed
+  cli.py        # beacon-eval: the single CLI entry point (short/find/story/speed)
 tests/
   test_patch.py test_sample.py test_find.py
   test_story.py test_speed.py test_cli.py test_load.py test_seed.py

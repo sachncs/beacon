@@ -21,7 +21,6 @@ whitespace-insensitive). Reported accuracy is the mean across QA1..QA5.
 
 from __future__ import annotations
 
-import argparse
 import json
 import random
 from collections import defaultdict
@@ -139,7 +138,7 @@ def run(
     ctx: list[int],
     task: list[int] | None = None,
     frac: list[float] | None = None,
-    max: int = 32,
+    max_new_tokens: int = 32,
     seed: int = 0,
     n: int = 3,
     dtype: torch.dtype | str = torch.float16,
@@ -172,7 +171,7 @@ def run(
         with torch.no_grad():
             out_ids = m.generate(
                 ids,
-                max_new_tokens=max,
+                max_new_tokens=max_new_tokens,
                 do_sample=False,
                 pad_token_id=tok.pad_token_id,
             )
@@ -196,40 +195,4 @@ def run(
     return by_ctx
 
 
-def cli(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Run BABILong (Table 4)")
-    p.add_argument("--model", required=True)
-    p.add_argument("--window", type=int, default=256)
-    p.add_argument("--sink", type=int, default=4)
-    p.add_argument("--ctx", default="1000,2000,4000,8000")
-    p.add_argument("--task", default="1,2,3,4,5")
-    p.add_argument("--frac", default="0.5")
-    p.add_argument("--max", type=int, default=32)
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--n", type=int, default=3)
-    p.add_argument("--dtype", default="float16")
-    p.add_argument("--max-ctx", type=int, default=None)
-    p.add_argument("--out", type=Path, default=None)
-    args = p.parse_args(argv)
-
-    run(
-        model=args.model,
-        cfg=Config(window=args.window, sink=args.sink),
-        ctx=[int(x) for x in args.ctx.split(",")],
-        task=[int(x) for x in args.task.split(",")],
-        frac=[float(x) for x in args.frac.split(",") if x],
-        max=args.max,
-        seed=args.seed,
-        n=args.n,
-        dtype=args.dtype,
-        max_ctx=args.max_ctx,
-        out=args.out,
-    )
-    return 0
-
-
-__all__ = ["TASK", "samples", "run", "cli"]
-
-
-if __name__ == "__main__":
-    raise SystemExit(cli())
+__all__ = ["TASK", "samples", "run"]

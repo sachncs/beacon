@@ -23,7 +23,6 @@ Falls back gracefully to any local GPU/CPU.
 
 from __future__ import annotations
 
-import argparse
 import json
 import time
 from dataclasses import asdict, dataclass
@@ -227,34 +226,4 @@ def run(
     return out_dict
 
 
-def cli(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Speed / KV-cache memory benchmark (Figure 2)")
-    p.add_argument("--model", required=True)
-    p.add_argument("--window", type=int, default=64)
-    p.add_argument("--sink", type=int, default=4)
-    p.add_argument("--ctx", default="128,256,512,1024,2048,4096,8192,16384,65536")
-    p.add_argument("--method", default="fa,swa")
-    p.add_argument("--step", type=int, default=64)
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--dtype", default="float16")
-    p.add_argument("--out", type=Path, default=None)
-    args = p.parse_args(argv)
-
-    run(
-        model=args.model,
-        cfg=Config(window=args.window, sink=args.sink),
-        ctx=[int(x) for x in args.ctx.split(",")],
-        method=tuple(x.strip() for x in args.method.split(",") if x),
-        step=args.step,
-        seed=args.seed,
-        dtype=args.dtype,
-        out=args.out,
-    )
-    return 0
-
-
-__all__ = ["Bench", "Method", "METHOD", "kv", "kv_swa", "bench", "run", "cli"]
-
-
-if __name__ == "__main__":
-    raise SystemExit(cli())
+__all__ = ["Bench", "Method", "METHOD", "kv", "kv_swa", "bench", "run"]

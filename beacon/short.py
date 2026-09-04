@@ -22,7 +22,6 @@ Or via the CLI::
 
 from __future__ import annotations
 
-import argparse
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -96,35 +95,4 @@ def run(s: Short) -> dict[str, float]:
     return flat
 
 
-def cli(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Run short-context benchmarks (Table 2)")
-    p.add_argument("--model", required=True)
-    p.add_argument("--window", type=int, default=64)
-    p.add_argument("--sink", type=int, default=4)
-    p.add_argument("--task", default=",".join(DEFAULT_TASK))
-    p.add_argument("--batch", default="auto:4")
-    p.add_argument("--shot", type=int, default=5)
-    p.add_argument("--limit", type=int, default=None)
-    p.add_argument("--dtype", default="float16")
-    p.add_argument("--out", type=Path, default=None)
-    args = p.parse_args(argv)
-
-    s = Short(
-        model=args.model,
-        cfg=Config(window=args.window, sink=args.sink),
-        task=tuple(t.strip() for t in args.task.split(",") if t.strip()),
-        batch=args.batch,
-        shot=args.shot,
-        limit=args.limit,
-        dtype=args.dtype,
-        out=args.out,
-    )
-    print(json.dumps(run(s), indent=2))
-    return 0
-
-
-__all__ = ["Short", "DEFAULT_TASK", "run", "cli"]
-
-
-if __name__ == "__main__":
-    raise SystemExit(cli())
+__all__ = ["Short", "DEFAULT_TASK", "run"]

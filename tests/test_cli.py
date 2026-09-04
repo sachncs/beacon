@@ -35,12 +35,12 @@ def test_cli_dispatches_find_to_find_run(monkeypatch, capsys):
 
     called = {}
 
-    def fake_run(*, model, cfg, ctx, variant, frac, max, seed, n, dtype, out):
+    def fake_run(*, model, cfg, ctx, variant, frac, max_new_tokens, seed, n, dtype, out):
         called["model"] = model
         called["ctx"] = ctx
         called["variant"] = variant
         called["cfg"] = cfg
-        called["max"] = max
+        called["max_new_tokens"] = max_new_tokens
 
     import beacon.find as find_mod
 
@@ -64,7 +64,7 @@ def test_cli_dispatches_find_to_find_run(monkeypatch, capsys):
     assert called["variant"] == ("1", "2")
     assert called["cfg"].window == 32
     assert called["cfg"].sink == 2
-    assert called["max"] == 8
+    assert called["max_new_tokens"] == 8
 
 
 def test_cli_dispatches_story(monkeypatch):
@@ -72,10 +72,10 @@ def test_cli_dispatches_story(monkeypatch):
 
     called = {}
 
-    def fake_run(*, model, cfg, ctx, task, frac, max, seed, n, dtype, max_ctx, out):
+    def fake_run(*, model, cfg, ctx, task, frac, max_new_tokens, seed, n, dtype, max_ctx, out):
         called["task"] = task
         called["ctx"] = ctx
-        called["max"] = max
+        called["max_new_tokens"] = max_new_tokens
         called["max_ctx"] = max_ctx
 
     import beacon.story as story_mod
@@ -93,7 +93,7 @@ def test_cli_dispatches_story(monkeypatch):
     assert rc == 0
     assert called["task"] == [1, 3, 5]
     assert called["ctx"] == [100, 200]
-    assert called["max"] == 16
+    assert called["max_new_tokens"] == 16
     assert called["max_ctx"] == 3000
 
 
@@ -195,7 +195,7 @@ def test_cli_dtype_is_passed_through(monkeypatch):
 
     captured = {}
 
-    def fake_run(*, model, cfg, ctx, variant, frac, max, seed, n, dtype, out):
+    def fake_run(*, model, cfg, ctx, variant, frac, max_new_tokens, seed, n, dtype, out):
         captured["dtype"] = dtype
         return {}
 
@@ -206,6 +206,17 @@ def test_cli_dtype_is_passed_through(monkeypatch):
     rc = cli.main(["find", "--model", "m", "--dtype", "bfloat16"])
     assert rc == 0
     assert captured["dtype"] == "bfloat16"
+
+
+def test_per_module_cli_entry_points_are_removed():
+    """beacon.cli.main is the one and only CLI entry point.
+
+    find/story/short/speed expose run(...), not a thin argparse wrapper; the
+    unified dispatch owns all flag parsing so flags never drift per module.
+    """
+    for mod in ("find", "story", "short", "speed"):
+        m = importlib.import_module(f"beacon.{mod}")
+        assert not hasattr(m, "cli")
 
 
 def test_default_model_env(monkeypatch):

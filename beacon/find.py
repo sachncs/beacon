@@ -17,7 +17,6 @@ of greedy-decoded completions whose text contains the ground-truth answer
 
 from __future__ import annotations
 
-import argparse
 import json
 import random
 import string
@@ -100,7 +99,7 @@ def run(
     ctx: list[int],
     variant: list[str] | None = None,
     frac: list[float] | None = None,
-    max: int = 32,
+    max_new_tokens: int = 32,
     seed: int = 0,
     n: int = 1,
     dtype: torch.dtype | str = torch.float16,
@@ -123,7 +122,7 @@ def run(
             with torch.no_grad():
                 out_ids = m.generate(
                     ids,
-                    max_new_tokens=max,
+                    max_new_tokens=max_new_tokens,
                     do_sample=False,
                     pad_token_id=tok.pad_token_id,
                 )
@@ -143,38 +142,4 @@ def run(
     return results
 
 
-def cli(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Run NIAH (Table 3)")
-    p.add_argument("--model", required=True)
-    p.add_argument("--window", type=int, default=256)
-    p.add_argument("--sink", type=int, default=4)
-    p.add_argument("--ctx", default="512,1024,2048,4096")
-    p.add_argument("--variant", default="1,2,3")
-    p.add_argument("--frac", default="0.0,0.25,0.5,0.75,1.0")
-    p.add_argument("--max", type=int, default=32)
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--n", type=int, default=1)
-    p.add_argument("--dtype", default="float16")
-    p.add_argument("--out", type=Path, default=None)
-    args = p.parse_args(argv)
-
-    run(
-        model=args.model,
-        cfg=Config(window=args.window, sink=args.sink),
-        ctx=[int(x) for x in args.ctx.split(",")],
-        variant=[x.strip() for x in args.variant.split(",") if x],
-        frac=[float(x) for x in args.frac.split(",") if x],
-        max=args.max,
-        seed=args.seed,
-        n=args.n,
-        dtype=args.dtype,
-        out=args.out,
-    )
-    return 0
-
-
-__all__ = ["VARIANT", "samples", "run", "cli"]
-
-
-if __name__ == "__main__":
-    raise SystemExit(cli())
+__all__ = ["VARIANT", "samples", "run"]
