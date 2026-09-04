@@ -5,16 +5,17 @@ Instead we patch the per-subcommand ``run`` functions to record that
 they were called and assert the dispatch flow.
 """
 
+import importlib
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 
 def test_cli_help_lists_subcommands():
-    import pytest
-
     from beacon.cli import main
 
     # argparse raises SystemExit on --help
@@ -158,8 +159,6 @@ def test_default_model_env(monkeypatch):
     """BEACON_MODEL env var overrides the default."""
     monkeypatch.setenv("BEACON_MODEL", "env-model")
     # Force reimport to pick up the env var
-    import importlib
-
     from beacon import cli
 
     importlib.reload(cli)

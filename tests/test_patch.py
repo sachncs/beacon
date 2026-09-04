@@ -11,9 +11,11 @@ Run: ``pytest tests/ -q`` (after ``pip install -e ".[dev]"``) or
 ``python tests/test_patch.py`` for a no-deps smoke test.
 """
 
+import importlib
 import sys
 from pathlib import Path
 
+import pytest
 import torch
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -55,15 +57,11 @@ def test_decoding_mask_attends_to_recent_window():
 
 
 def test_mask_rejects_seq_k_lt_seq_q():
-    import pytest
-
     with pytest.raises(ValueError):
         mask(seq_q=4, seq_k=2, window=4, sink=2)
 
 
 def test_config_validation():
-    import pytest
-
     with pytest.raises(ValueError):
         Config(window=0)
     with pytest.raises(ValueError):
@@ -349,7 +347,6 @@ def test_patch_preserves_padding():
 
 def test_patch_unsupported_encoder_model():
     """An encoder model that does not route through create_causal_mask raises NotImplementedError."""
-    import pytest
     from transformers import AutoConfig, AutoModel
 
     config = AutoConfig.from_pretrained(
@@ -363,10 +360,6 @@ def test_patch_unsupported_encoder_model():
 
 def test_patch_old_transformers_raises(monkeypatch):
     """patch() refuses to run on an unsupported (pre-create_causal_mask) transformers version."""
-    import importlib
-
-    import pytest
-
     patch_mod = importlib.import_module("beacon.patch")
     monkeypatch.setattr(patch_mod, "transformers_version", lambda: (4, 43))
     with pytest.raises(RuntimeError):

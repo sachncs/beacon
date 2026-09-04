@@ -3,6 +3,7 @@
 import sys
 from pathlib import Path
 
+import pytest
 import torch
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -56,8 +57,6 @@ def test_kv_matches_analytic_formula():
 
 def test_unknown_method_in_bench_raises():
     """bench() rejects method names not in METHOD."""
-    import pytest
-
     from beacon.speed import bench
 
     with pytest.raises(ValueError):

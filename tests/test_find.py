@@ -4,6 +4,8 @@ import random
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -49,8 +51,6 @@ def test_samples_grid_shape():
 
 
 def test_samples_unknown_variant_raises():
-    import pytest
-
     with pytest.raises(ValueError):
         samples(ctx=[10], variant="9")
 
