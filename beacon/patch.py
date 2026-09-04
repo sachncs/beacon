@@ -218,7 +218,7 @@ def architecture_module(model: nn.Module):
     module_name = type(model).__module__
     try:
         return importlib.import_module(module_name)
-    except ImportError as exc:  # pragma: no cover - defensive
+    except ImportError as exc:
         raise NotImplementedError(
             f"cannot locate the architecture module {module_name!r} for {type(model).__name__}"
         ) from exc

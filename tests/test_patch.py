@@ -160,6 +160,18 @@ def test_patch_is_idempotent():
     assert out.logits.shape == (1, 4, config.vocab_size)
 
 
+def test_architecture_module_failure_raises_not_implemented():
+    """A model class that cannot be resolved to an importable module errors loudly."""
+    from beacon.patch import architecture_module
+
+    class Fake:
+        pass
+
+    Fake.__module__ = "definitely.not.a.real.beacon.architecture.module"
+    with pytest.raises(NotImplementedError):
+        architecture_module(Fake())
+
+
 def attended_mask(model, ids, **forward_kwargs):
     """The ``(B, 1, Q, KV)`` additive attention mask ``model`` used during forward.
 
