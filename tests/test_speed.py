@@ -88,6 +88,37 @@ def test_unknown_method_in_bench_raises():
         )
 
 
+def test_bench_rejects_unknown_dtype_before_loading():
+    """bench() validates dtype like every other runner; no getattr(torch, s)."""
+    from beacon.speed import bench
+
+    with pytest.raises(ValueError):
+        bench(
+            model_id="hf-internal-testing/tiny-random-LlamaForCausalLM",
+            method="fa",
+            cfg=Config(),
+            ctx=[8],
+            step=1,
+            dtype="float81",  # not a torch dtype
+        )
+
+
+def test_bench_does_not_silently_substitute_model():
+    """A load failure must propagate, never fall back to a different model."""
+    from beacon.speed import bench
+
+    # The bogus method check fires first, so use a valid method but an
+    # unresolvable model id to force the real load path to fail.
+    with pytest.raises(Exception):
+        bench(
+            model_id="definitely-not-a-real-model-id-xyz",
+            method="fa",
+            cfg=Config(),
+            ctx=[8],
+            step=1,
+        )
+
+
 if __name__ == "__main__":
     test_method_registry_has_fa_and_swa()
     test_fa_is_pass_through()

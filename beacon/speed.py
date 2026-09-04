@@ -30,6 +30,7 @@ from pathlib import Path
 
 import torch
 
+from .load import _coerce_dtype
 from .patch import Config
 from .seed import seed_all
 
@@ -110,7 +111,7 @@ def bench(
     cfg: Config,
     ctx: list[int],
     step: int = 64,
-    dtype: str = "float16",
+    dtype: torch.dtype | str = "float16",
     device: str | None = None,
     seed: int = 0,
 ) -> list[Bench]:
@@ -120,29 +121,22 @@ def bench(
     ``c`` tokens once (untimed) into a ``DynamicCache``, then the timed loop
     decodes ``step`` single tokens against that cache. No ``torch.cat`` grows
     inside the timed region, and ``kv_mib`` is reported at the prefill length.
+
+    Loads ``model_id`` directly (no silent tiny-model substitution); any load
+    failure propagates.
     """
-    from transformers import AutoConfig, AutoModelForCausalLM, DynamicCache
+    from transformers import AutoModelForCausalLM, DynamicCache
 
     if method not in METHOD:
         raise ValueError(f"unknown method: {method!r}; choose from {list(METHOD)}")
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
     dev = torch.device(device)
+    torch_dtype = _coerce_dtype(dtype)
 
-    # Use a tiny random model of the paper's specs if available; otherwise
-    # fall back to the requested model. The relative FA vs SWA behaviour
-    # is what matters for the benchmark.
-    try:
-        config = AutoConfig.from_pretrained(
-            model_id,
-            num_hidden_layers=4,
-            hidden_size=1024,
-            intermediate_size=4096,
-            num_attention_heads=16,
-        )
-        model = AutoModelForCausalLM.from_config(config, torch_dtype=getattr(torch, dtype)).to(dev)
-    except Exception:
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=getattr(torch, dtype)).to(dev)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id, torch_dtype=torch_dtype
+    ).to(dev)
 
     model.eval()
     model = METHOD[method].apply(model, cfg)
