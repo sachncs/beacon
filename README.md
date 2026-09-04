@@ -24,14 +24,15 @@ beacon/
   patch.py      # Config, mask(), patch()  — single file, the algorithm
   load.py       # load(model, cfg) → (model, tokenizer)
   sample.py     # Sample, filler, insert, contains
+  seed.py       # seed_all(), seeded_rng()  — central determinism
   short.py      # Short dataclass + run() via lm-eval (Table 2)
   find.py       # VARIANT registry + run() (S-NIAH, Table 3)
   story.py      # TASK registry + run()  (BABILong, Table 4)
-  speed.py      # Method registry + run() + kv() (Figure 2)
+  speed.py      # Method registry + run() + kv()/kv_swa() (Figure 2)
   cli.py        # beacon-eval: short / find / story / speed
 tests/
   test_patch.py test_sample.py test_find.py
-  test_story.py test_speed.py test_cli.py
+  test_story.py test_speed.py test_cli.py test_load.py test_seed.py
 ```
 
 ## Quick start
@@ -107,23 +108,28 @@ METHOD["linear"] = Method("linear", my_linear)
   variation lives in `dict`s of callables.
 - **Frozen dataclasses for configurations.** `Short`, `Config` are immutable
   by default.
-- **Determinism.** Every RNG-taking function takes an explicit `seed`. The
-  speed bench uses `torch.manual_seed(seed)` for reproducible random inputs.
+- **Determinism.** Every RNG-taking function takes an explicit `seed`, and all
+  seeding funnels through `beacon.seed.seed_all()` / `seeded_rng()`. The speed
+  bench prefills a fixed context and times steady-state decode with a
+  per-device `torch.Generator`.
 
 ## CLI flags (single-word)
 
 ```
 short : --model --window --sink --task --batch --shot --limit --dtype --out
-find  : --model --window --sink --ctx --variant --frac --max --seed --n --dtype --out
-story : --model --window --sink --ctx --task --frac --max --seed --n --dtype --out
+find  : --model --window --sink --ctx --variant --frac --max-new-tokens --seed --n --dtype --out
+story : --model --window --sink --ctx --task --frac --max-new-tokens --max-ctx --seed --n --dtype --out
 speed : --model --window --sink --ctx --method --step --seed --dtype --out
 ```
+
+`story --max-ctx` bounds the input token length (prompts are **not** truncated
+by default); `--shot` defaults to 5 for Table 2 (MMLU is reported 5-shot).
 
 ## Tests
 
 ```bash
 PYTHONPATH=. python -m pytest tests/ -q
-# 45 passed
+# 68 passed
 ```
 
 ## Paper-vs-ours differences
