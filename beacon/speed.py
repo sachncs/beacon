@@ -29,9 +29,10 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import torch
+from transformers import AutoModelForCausalLM, DynamicCache
 
 from .load import _coerce_dtype
-from .patch import Config
+from .patch import Config, patch
 from .seed import seed_all
 
 
@@ -61,7 +62,6 @@ def fa(model, _cfg) -> torch.nn.Module:
 
 def swa(model, cfg: Config) -> torch.nn.Module:
     """Sliding Window Attention with sinks."""
-    from .patch import patch
     return patch(model, cfg)
 
 
@@ -125,8 +125,6 @@ def bench(
     Loads ``model_id`` directly (no silent tiny-model substitution); any load
     failure propagates.
     """
-    from transformers import AutoModelForCausalLM, DynamicCache
-
     if method not in METHOD:
         raise ValueError(f"unknown method: {method!r}; choose from {list(METHOD)}")
     if device is None:

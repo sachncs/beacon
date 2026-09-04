@@ -23,6 +23,7 @@ from typing import Callable
 
 import torch
 import torch.nn as nn
+from transformers import PreTrainedModel, __version__, masking_utils
 
 MIN_TRANSFORMERS = (4, 55)
 
@@ -117,7 +118,6 @@ def swa_mask_function(window: int, sink: int) -> Callable[[int, int, int, int], 
     A query at absolute position ``q`` attends to keys in ``[0, sink)`` union
     ``[q - window + 1, q]`` (``window`` positions ending at ``q``, inclusive).
     """
-    from transformers import masking_utils
 
     def sink_allows(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
         return kv_idx < sink
@@ -148,7 +148,6 @@ def swa_create_causal_mask(upstream: Callable):
     model uses its own :class:`Config` even though the architecture module may be
     shared across instances.
     """
-    from transformers import masking_utils
 
     def create_causal_mask(
         config,
@@ -227,8 +226,6 @@ def architecture_module(model: nn.Module):
 
 def transformers_version() -> tuple[int, int]:
     """Return ``transformers.__version__`` as a ``(major, minor)`` tuple."""
-    from transformers import __version__
-
     parts = []
     for tok in __version__.split(".")[:2]:
         digits = "".join(ch for ch in tok if ch.isdigit())
@@ -268,8 +265,6 @@ def patch(model: nn.Module, cfg: Config) -> nn.Module:
     (even of the same architecture) with different ``Config`` values does not
     cross-contaminate them.
     """
-    from transformers import PreTrainedModel
-
     check_transformers_version()
     if not isinstance(model, PreTrainedModel):
         raise TypeError(

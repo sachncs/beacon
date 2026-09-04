@@ -16,13 +16,11 @@ dependencies = [
     "accelerate>=0.30",
     "datasets>=2.19",
     "numpy>=1.24",
+    "lm-eval>=0.4.3",
     "huggingface_hub>=0.23",
 ]
 
 [project.optional-dependencies]
-eval = [
-    "lm-eval>=0.4.3",
-]
 dev = [
     "pytest>=8",
 ]

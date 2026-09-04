@@ -26,7 +26,9 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+import lm_eval
 import torch
+from lm_eval.models.huggingface import HFLM
 
 from .load import load
 from .patch import Config
@@ -51,9 +53,6 @@ class Short:
 
 def run(s: Short) -> dict[str, float]:
     """Run the configured benchmarks. Returns ``{task: primary_metric}``."""
-    import lm_eval
-    from lm_eval.models.huggingface import HFLM
-
     m, tok = load(s.model, s.cfg, dtype=s.dtype)
 
     # HFLM takes the patched model directly; no wrapper class needed.

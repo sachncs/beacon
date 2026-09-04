@@ -14,6 +14,7 @@ Usage::
 from __future__ import annotations
 
 import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from .patch import Config, patch
 
@@ -64,8 +65,6 @@ def load(
         The patched model and tokenizer are returned in eval mode. The
         tokenizer's pad token is set to eos if missing.
     """
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-
     if cfg is None:
         cfg = Config()
     dtype = _coerce_dtype(dtype)

@@ -20,6 +20,9 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from . import find, short, speed, story
+from .patch import Config
+
 
 DEFAULT_MODEL = os.environ.get("BEACON_MODEL", "openbmb/MiniCPM5-1B")
 
@@ -41,15 +44,11 @@ def strs(s: str) -> tuple[str, ...]:
 
 
 def make_config(args: argparse.Namespace):
-    from .patch import Config
-
     return Config(window=args.window, sink=args.sink)
 
 
 def run_short(args) -> None:
-    from .short import Short, run
-
-    s = Short(
+    s = short.Short(
         model=args.model,
         cfg=make_config(args),
         task=strs(args.task),
@@ -59,13 +58,11 @@ def run_short(args) -> None:
         dtype=args.dtype,
         out=optional_path(args.out),
     )
-    print(json.dumps(run(s), indent=2))
+    print(json.dumps(short.run(s), indent=2))
 
 
 def run_find(args) -> None:
-    from .find import run
-
-    run(
+    find.run(
         model=args.model,
         cfg=make_config(args),
         ctx=ints(args.ctx),
@@ -80,9 +77,7 @@ def run_find(args) -> None:
 
 
 def run_story(args) -> None:
-    from .story import run
-
-    run(
+    story.run(
         model=args.model,
         cfg=make_config(args),
         ctx=ints(args.ctx),
@@ -98,9 +93,7 @@ def run_story(args) -> None:
 
 
 def run_speed(args) -> None:
-    from .speed import run
-
-    run(
+    speed.run(
         model=args.model,
         cfg=make_config(args),
         ctx=ints(args.ctx),
