@@ -29,6 +29,7 @@ import torch
 from .load import load
 from .patch import Config
 from .sample import Sample, contains, filler, insert
+from .seed import seeded_rng
 
 
 # V1: constant needle / question / answer.
@@ -79,7 +80,7 @@ def samples(
         raise ValueError(f"unknown variant: {variant!r}; choose from {list(VARIANT)}")
 
     gen = VARIANT[variant]
-    rng = random.Random(seed)
+    rng = seeded_rng(seed)
     out: list[Sample] = []
     for c in ctx:
         for f in frac:

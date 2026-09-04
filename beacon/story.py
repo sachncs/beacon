@@ -32,6 +32,7 @@ import torch
 from .load import load
 from .patch import Config
 from .sample import Sample, contains, filler
+from .seed import seeded_rng
 
 
 NAMES = [
@@ -114,7 +115,7 @@ def samples(
     if bad:
         raise ValueError(f"unknown task ids: {bad}; choose from {list(TASK)}")
 
-    rng = random.Random(seed)
+    rng = seeded_rng(seed)
     out: list[Sample] = []
     for qa in task:
         gen = TASK[qa]
