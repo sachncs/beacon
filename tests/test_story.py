@@ -72,6 +72,17 @@ def test_samples_are_deterministic():
     assert a[0].prompt == b[0].prompt
 
 
+def test_samples_ctx_beyond_8192_is_not_capped():
+    """Regression: prompts must not be silently truncated to 8192 tokens."""
+    # Build the prompt at a real >8192-word context and check it keeps the story.
+    from beacon.sample import contains
+
+    cell = samples(task=[1], ctx=[20000], seed=3, n=1)
+    s = cell[0]
+    assert len(s.prompt.split()) > 8192
+    assert contains(s.answer, s.prompt)
+
+
 if __name__ == "__main__":
     test_task_registry_has_five()
     test_qa1_single_fact()
