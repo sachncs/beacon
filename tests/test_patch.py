@@ -327,6 +327,52 @@ def test_patch_forces_eager_and_stamps_config():
     }
 
 
+def test_patch_preserves_padding():
+    """A padded batch still gets the correct SWA mask: sinks + window per position."""
+    from transformers import AutoConfig, AutoModelForCausalLM
+
+    config = AutoConfig.from_pretrained(
+        "hf-internal-testing/tiny-random-LlamaForCausalLM",
+        num_hidden_layers=1,
+        pad_token_id=0,
+    )
+    model = AutoModelForCausalLM.from_config(config).eval()
+    window, sink = 4, 2
+    patch(model, Config(window=window, sink=sink))
+
+    seq = 12
+    ids = torch.randint(1, config.vocab_size, (2, seq))
+    attn_mask = torch.ones(2, seq, dtype=torch.long)
+    amask = attended_mask(model, ids, attention_mask=attn_mask)
+    attend = amask[0, 0] == 0.0  # batch row 0 is un-padded
+    assert int(attend[seq - 1].sum()) == sink + window
+
+def test_patch_unsupported_encoder_model():
+    """An encoder model that does not route through create_causal_mask raises NotImplementedError."""
+    import pytest
+    from transformers import AutoConfig, AutoModel
+
+    config = AutoConfig.from_pretrained(
+        "hf-internal-testing/tiny-random-BertForMaskedLM",
+        num_hidden_layers=1,
+    )
+    model = AutoModel.from_config(config)
+    with pytest.raises(NotImplementedError):
+        patch(model, Config(window=4, sink=2))
+
+
+def test_patch_old_transformers_raises(monkeypatch):
+    """patch() refuses to run on an unsupported (pre-create_causal_mask) transformers version."""
+    import importlib
+
+    import pytest
+
+    patch_mod = importlib.import_module("beacon.patch")
+    monkeypatch.setattr(patch_mod, "transformers_version", lambda: (4, 43))
+    with pytest.raises(RuntimeError):
+        patch_mod.patch(None, Config(window=4, sink=2))
+
+
 if __name__ == "__main__":
     test_mask_shape_and_dtype()
     test_prefill_attends_to_sinks_and_window()
