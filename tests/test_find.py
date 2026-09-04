@@ -9,7 +9,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from beacon.find import VARIANT, samples, v1, v2, v3  # noqa: E402
+from beacon.find import VARIANT, samples, v1, v2, v3
 
 
 def test_variant_registry_has_three():

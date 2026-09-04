@@ -9,8 +9,8 @@ import torch
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from beacon.patch import Config  # noqa: E402
-from beacon.speed import METHOD, Method, fa, kv, kv_swa, swa  # noqa: E402
+from beacon.patch import Config
+from beacon.speed import METHOD, Method, fa, kv, kv_swa, swa
 
 
 def test_method_registry_has_fa_and_swa():

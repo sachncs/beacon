@@ -9,7 +9,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from beacon.story import TASK, qa1, qa2, qa3, qa4, qa5, samples  # noqa: E402
+from beacon.story import TASK, qa1, qa2, qa3, qa4, qa5, samples
 
 
 def test_task_registry_has_five():

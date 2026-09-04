@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from beacon.sample import Sample, contains, filler, insert  # noqa: E402
+from beacon.sample import Sample, contains, filler, insert
 
 
 def test_filler_word_count_within_tolerance():

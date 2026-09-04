@@ -21,7 +21,7 @@ import torch
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from beacon.patch import Config, mask, patch  # noqa: E402
+from beacon.patch import Config, mask, patch
 
 
 def test_mask_shape_and_dtype():

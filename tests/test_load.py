@@ -13,7 +13,7 @@ import torch
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from beacon.load import _coerce_dtype  # noqa: E402
+from beacon.load import _coerce_dtype
 
 
 def test_dtype_passthrough_returns_same():
