@@ -244,6 +244,33 @@ def test_patch_applies_swa_mask_not_full_causal():
     assert not bool(attend[future_non_sink].any())
 
 
+def test_mask_helper_agrees_with_patched_model():
+    """mask() and the patched model's eager create_causal_mask are one predicate.
+
+    Two implementations of the SWA-with-sinks rule (the standalone tensor helper
+    mask() and the model's create_causal_mask factory) must produce the exact
+    same attend-set, or tests written against mask() could silently miss a model
+    that behaves differently. This cross-checks several (window, sink) configs.
+    """
+    from transformers import AutoConfig, AutoModelForCausalLM
+
+    config = AutoConfig.from_pretrained(
+        "hf-internal-testing/tiny-random-LlamaForCausalLM",
+        num_hidden_layers=1,
+    )
+    seq = 16
+    ids = torch.randint(0, config.vocab_size, (1, seq))
+
+    for window, sink in [(4, 2), (8, 1), (2, 4), (16, 0)]:
+        model = AutoModelForCausalLM.from_config(config).eval()
+        patch(model, Config(window=window, sink=sink))
+        amask = attended_mask(model, ids)
+
+        expected = mask(seq, seq, window=window, sink=sink, dtype=amask.dtype)
+        # eager backend blocks with torch.finfo(dtype).min, not -inf; the sentinel only matters via (== 0.0).
+        assert torch.equal(amask[0, 0] == 0.0, expected[0, 0] == 0.0)
+
+
 def test_patch_cross_instance_independence():
     """Two patched models of the same architecture use their own Config, not the last patch."""
     from transformers import AutoConfig, AutoModelForCausalLM
