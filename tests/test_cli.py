@@ -26,7 +26,7 @@ def test_cli_help_lists_subcommands():
 def test_dispatch_table_has_all_subcommands():
     from beacon import cli
 
-    assert set(cli._DISPATCH.keys()) == {"short", "find", "story", "speed"}
+    assert set(cli.dispatch.keys()) == {"short", "find", "story", "speed"}
 
 
 def test_cli_dispatches_find_to_find_run(monkeypatch, capsys):
@@ -40,6 +40,7 @@ def test_cli_dispatches_find_to_find_run(monkeypatch, capsys):
         called["ctx"] = ctx
         called["variant"] = variant
         called["cfg"] = cfg
+        called["max"] = max
 
     import beacon.find as find_mod
 
@@ -53,7 +54,7 @@ def test_cli_dispatches_find_to_find_run(monkeypatch, capsys):
         "--ctx", "128,256",
         "--variant", "1,2",
         "--frac", "0.5",
-        "--max", "8",
+        "--max-new-tokens", "8",
         "--seed", "1",
         "--n", "2",
     ])
@@ -63,6 +64,7 @@ def test_cli_dispatches_find_to_find_run(monkeypatch, capsys):
     assert called["variant"] == ("1", "2")
     assert called["cfg"].window == 32
     assert called["cfg"].sink == 2
+    assert called["max"] == 8
 
 
 def test_cli_dispatches_story(monkeypatch):
@@ -70,9 +72,11 @@ def test_cli_dispatches_story(monkeypatch):
 
     called = {}
 
-    def fake_run(*, model, cfg, ctx, task, frac, max, seed, n, dtype, out):
+    def fake_run(*, model, cfg, ctx, task, frac, max, seed, n, dtype, max_ctx, out):
         called["task"] = task
         called["ctx"] = ctx
+        called["max"] = max
+        called["max_ctx"] = max_ctx
 
     import beacon.story as story_mod
 
@@ -83,10 +87,14 @@ def test_cli_dispatches_story(monkeypatch):
         "--model", "m",
         "--ctx", "100,200",
         "--task", "1,3,5",
+        "--max-new-tokens", "16",
+        "--max-ctx", "3000",
     ])
     assert rc == 0
     assert called["task"] == [1, 3, 5]
     assert called["ctx"] == [100, 200]
+    assert called["max"] == 16
+    assert called["max_ctx"] == 3000
 
 
 def test_cli_dispatches_short(monkeypatch, capsys):
@@ -153,6 +161,51 @@ def test_cli_dispatches_speed(monkeypatch):
     assert called["method"] == ("fa",)
     assert called["step"] == 4
     assert called["cfg"].window == 16
+
+
+def test_cli_unknown_subcommand_raises():
+    from beacon.cli import main
+
+    with pytest.raises(SystemExit) as e:
+        main(["no-such-cmd"])
+    assert e.value.code != 0
+
+
+def test_cli_short_default_shot_is_five(monkeypatch):
+    """The Table-2 runner defaults MMLU et al. to 5-shot unless overridden."""
+    from beacon import cli
+
+    captured = {}
+
+    def fake_run(s):
+        captured["shot"] = s.shot
+        return {}
+
+    import beacon.short as short_mod
+
+    monkeypatch.setattr(short_mod, "run", fake_run)
+
+    rc = cli.main(["short", "--model", "m"])
+    assert rc == 0
+    assert captured["shot"] == 5
+
+
+def test_cli_dtype_is_passed_through(monkeypatch):
+    from beacon import cli
+
+    captured = {}
+
+    def fake_run(*, model, cfg, ctx, variant, frac, max, seed, n, dtype, out):
+        captured["dtype"] = dtype
+        return {}
+
+    import beacon.find as find_mod
+
+    monkeypatch.setattr(find_mod, "run", fake_run)
+
+    rc = cli.main(["find", "--model", "m", "--dtype", "bfloat16"])
+    assert rc == 0
+    assert captured["dtype"] == "bfloat16"
 
 
 def test_default_model_env(monkeypatch):
