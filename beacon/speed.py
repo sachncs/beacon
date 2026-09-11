@@ -41,13 +41,22 @@ MethodFn = Callable[[PreTrainedModel, Config], PreTrainedModel]
 
 @dataclass(frozen=True)
 class Bench:
-    """One row of benchmark output."""
+    """One row of benchmark output.
+
+    ``kv_mib`` is the **steady-state** KV-cache cost for the benchmarked
+    method (the size of the K/V cache after prefill has been amortised and
+    the model has been decoding for a while). For SWA this is bounded by
+    ``window + sink``; for full causal attention it grows with the prefill
+    length. Callers interested in the prefill-only cost can use
+    ``kv_prefill_mib`` on the same row.
+    """
 
     method: str
     ctx: int
     tps: float
     kv_mib: float
     latency: float
+    kv_prefill_mib: float | None = None
 
 
 @dataclass(frozen=True)
@@ -207,9 +216,22 @@ def bench(
         elapsed = time.perf_counter() - t0
         tps = step / max(elapsed, 1e-9)
         latency_ms = (elapsed / step) * 1000.0
-        kv_mib = kv_swa(model, cfg) if method == "swa" else kv(model, c)
-        rows.append(Bench(method=method, ctx=c, tps=tps, kv_mib=kv_mib, latency=latency_ms))
-        print(f"{method} ctx={c:>6d}  tps={tps:7.1f}  latency={latency_ms:6.2f}ms  KV={kv_mib:7.2f} MiB")
+        kv_prefill_mib = kv(model, c)
+        kv_mib = kv_swa(model, cfg) if method == "swa" else kv_prefill_mib
+        rows.append(
+            Bench(
+                method=method,
+                ctx=c,
+                tps=tps,
+                kv_mib=kv_mib,
+                latency=latency_ms,
+                kv_prefill_mib=kv_prefill_mib,
+            )
+        )
+        print(
+            f"{method} ctx={c:>6d}  tps={tps:7.1f}  latency={latency_ms:6.2f}ms"
+            f"  KV(prefill)={kv_prefill_mib:7.2f} MiB  KV(steady)={kv_mib:7.2f} MiB"
+        )
     return rows
 
 
