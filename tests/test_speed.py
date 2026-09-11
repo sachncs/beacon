@@ -90,6 +90,34 @@ def test_kv_swa_is_bounded_by_window_plus_sink():
     assert abs(kv_swa(model, cfg) - kv_swa(model, Config(64, 4))) < 1e-12
 
 
+def test_bench_row_exposes_prefill_and_steady_kv_separately():
+    """Bench rows report kv_prefill_mib (prefill size) and kv_mib (steady-state)."""
+    from beacon.speed import bench as _bench
+
+    rows = _bench(
+        model_id="hf-internal-testing/tiny-random-LlamaForCausalLM",
+        method="swa",
+        cfg=Config(window=4, sink=2),
+        ctx=[8, 16],
+        step=1,
+    )
+    for row in rows:
+        assert row.kv_prefill_mib is not None
+        # kv_mib (steady) is bounded by window+sink; prefill grows with ctx.
+        assert row.kv_mib < row.kv_prefill_mib or row.kv_mib == row.kv_prefill_mib
+
+    rows_fa = _bench(
+        model_id="hf-internal-testing/tiny-random-LlamaForCausalLM",
+        method="fa",
+        cfg=Config(),
+        ctx=[8, 16],
+        step=1,
+    )
+    for row in rows_fa:
+        # FA has no bounded steady-state; prefill == steady (= full causal).
+        assert row.kv_prefill_mib == row.kv_mib
+
+
 def test_unknown_method_in_bench_raises():
     """bench() rejects method names not in METHOD."""
     from beacon.speed import bench
