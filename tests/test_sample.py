@@ -50,6 +50,17 @@ def test_contains_whitespace_insensitive():
     assert contains("hello, world", "hello world")
 
 
+def test_contains_underscores_normalized():
+    """Underscores in either answer or completion must be treated as word boundaries.
+
+    Python's ``\\w`` includes underscore, so ``re.sub(r\"\\W+\", ...)`` left the
+    underscore in place and ``hello_world`` vs ``hello world`` returned False.
+    """
+    assert contains("hello_world", "hello world")
+    assert contains("hello world", "hello_world")
+    assert contains("foo_bar", "x foo bar y")
+
+
 def test_contains_empty_answer_is_false():
     assert contains("", "anything") is False
     assert contains("   ", "anything") is False
