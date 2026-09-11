@@ -83,11 +83,16 @@ def qa4(rng: random.Random) -> tuple[str, str, str]:
     p1, p2 = rng.sample(PLACES, 2)
     actor = rng.choice(NAMES)
     obj = rng.choice(OBJECT)
-    return (
-        f"The {obj} is in the {p1}. {actor} picked up the {obj}. {actor} went to the {p2}.",
-        f"Is {actor} in the {p1}?",
-        "no",
-    )
+    moves = rng.random() < 0.5
+    if moves:
+        story = (
+            f"The {obj} is in the {p1}. {actor} picked up the {obj}. "
+            f"{actor} went to the {p2}."
+        )
+    else:
+        story = f"The {obj} is in the {p1}. {actor} is in the {p2}."
+    answer = "no" if moves else "yes"
+    return story, f"Is the {obj} in the {p1}?", answer
 
 
 def qa5(rng: random.Random) -> tuple[str, str, str]:
