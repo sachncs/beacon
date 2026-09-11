@@ -6,13 +6,8 @@ they were called and assert the dispatch flow.
 """
 
 import importlib
-import sys
-from pathlib import Path
 
 import pytest
-
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
 
 
 def test_cli_help_lists_subcommands():

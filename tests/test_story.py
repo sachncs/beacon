@@ -1,13 +1,8 @@
 """Tests for beacon.story — TASK registry, samples(), task generators."""
 
 import random
-import sys
-from pathlib import Path
 
 import pytest
-
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
 
 from beacon.story import TASK, qa1, qa2, qa3, qa4, qa5, samples
 

@@ -1,13 +1,8 @@
 """Tests for beacon.find — VARIANT registry, samples(), run() shape."""
 
 import random
-import sys
-from pathlib import Path
 
 import pytest
-
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
 
 from beacon.find import VARIANT, samples, v1, v2, v3
 

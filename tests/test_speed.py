@@ -1,13 +1,7 @@
 """Tests for beacon.speed — Method registry, kv() analytic formula."""
 
-import sys
-from pathlib import Path
-
 import pytest
 import torch
-
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
 
 from beacon.patch import Config
 from beacon.speed import METHOD, Method, fa, kv, kv_swa, swa
@@ -131,7 +125,7 @@ def test_bench_does_not_silently_substitute_model():
 
     # The bogus method check fires first, so use a valid method but an
     # unresolvable model id to force the real load path to fail.
-    with pytest.raises(Exception):
+    with pytest.raises(OSError):
         bench(
             model_id="definitely-not-a-real-model-id-xyz",
             method="fa",

@@ -4,14 +4,8 @@ The heavy ``load()`` itself downloads a model, so these cover the pure,
 download-free pieces: ``_coerce_dtype`` normalization and validation.
 """
 
-import sys
-from pathlib import Path
-
 import pytest
 import torch
-
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
 
 from beacon.load import _coerce_dtype
 
