@@ -129,7 +129,6 @@ by default); `--shot` defaults to 5 for Table 2 (MMLU is reported 5-shot).
 
 ```bash
 PYTHONPATH=. python -m pytest tests/ -q
-# 68 passed
 ```
 
 ## Paper-vs-ours differences
