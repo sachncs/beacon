@@ -41,8 +41,15 @@ def test_qa3_object_movement():
 def test_qa4_yes_no():
     rng = random.Random(0)
     story, question, answer = qa4(rng)
-    assert answer == "no"
-    assert question.startswith("Is ")
+    assert answer in ("yes", "no")
+    assert question.lower().startswith("is ")
+
+
+def test_qa4_balanced_yes_no():
+    """Regression: qa4 must produce both yes and no answers; not always no."""
+    rng = random.Random(0)
+    answers = {qa4(rng)[2] for _ in range(50)}
+    assert answers == {"yes", "no"}, f"qa4 only produced {answers}"
 
 
 def test_qa5_counting():
