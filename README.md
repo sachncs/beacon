@@ -58,6 +58,34 @@ python -m beacon.cli speed --model openbmb/MiniCPM5-1B \
     --window 64 --sink 4 --method fa,swa
 ```
 
+### What the output looks like
+
+Each subcommand prints one line per cell to stdout (the JSON dump in
+`--out <file>` carries the same numbers). The shapes you should expect:
+
+```
+# short — Table 2 numbers (per task, 5-shot, acc_norm for HellaSwag/ARC/PIQA)
+{"mmlu": 0.404, "arc_challenge": 0.341, "arc_easy": 0.628,
+ "hellaswag": 0.581, "piqa": 0.745, "winogrande": 0.602}
+
+# find — NIAH-{variant} ctx={ctx}: acc={acc}
+NIAH-1 ctx=1024: acc=1.000
+NIAH-2 ctx=4096: acc=0.667
+NIAH-3 ctx=2048: acc=0.333
+
+# story — average + per-task accuracy at each context length
+BABILong ctx=2000 avg=0.733 per-task={1: 0.9, 2: 0.8, 3: 0.7, 4: 0.7, 5: 0.6}
+
+# speed — one row per (method, ctx): KV(prefill) and KV(steady) in MiB
+=== fa ===
+fa  ctx=   4096  tps=  42.3  latency=23.65ms  KV(prefill)=128.00 MiB  KV(steady)=128.00 MiB
+=== swa ===
+swa ctx=  4096  tps=  38.1  latency=26.24ms  KV(prefill)=128.00 MiB  KV(steady)=  0.36 MiB
+```
+
+Numbers are illustrative; they show the *shape* of the output, not a
+benchmark. Run the commands to see the actual numbers on your hardware.
+
 ## Using the patch directly
 
 ```python
