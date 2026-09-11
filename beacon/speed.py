@@ -78,11 +78,18 @@ METHOD: dict[str, Method] = {
 def kv(model, seq_len: int) -> float:
     """KV-cache memory in MiB for a Llama-style model at ``seq_len`` tokens.
 
-    ``2 (K+V) * num_layers * seq_len * hidden * dtype_bytes``.
+    For multi-head attention ``K`` and ``V`` each have shape
+    ``(num_layers, num_kv_heads, seq_len, head_dim)``; for grouped-query
+    attention ``num_kv_heads < num_attention_heads`` so the cost grows with
+    ``num_kv_heads * head_dim`` rather than ``hidden_size``.
+
+    ``2 (K+V) * num_layers * num_kv_heads * head_dim * seq_len * dtype_bytes``.
     """
     cfg = model.config
     bytes_per = torch.tensor([], dtype=next(model.parameters()).dtype).element_size()
-    size_bytes = 2 * cfg.num_hidden_layers * seq_len * cfg.hidden_size * bytes_per
+    num_kv = getattr(cfg, "num_key_value_heads", None) or cfg.num_attention_heads
+    head_dim = getattr(cfg, "head_dim", None) or (cfg.hidden_size // cfg.num_attention_heads)
+    size_bytes = 2 * cfg.num_hidden_layers * num_kv * head_dim * seq_len * bytes_per
     return size_bytes / (1024 * 1024)
 
 
@@ -94,15 +101,22 @@ def kv_swa(model, cfg: Config) -> float:
     recent positions plus the ``sink`` tokens. So the steady-state memory is
     bounded and independent of ``seq_len``.
 
-    ``2 (K+V) * num_layers * (window + sink) * hidden * dtype_bytes``.
+    For GQA, only the KV heads (``num_kv_heads * head_dim``) carry K/V, never
+    ``hidden_size``.
+
+    ``2 (K+V) * num_layers * num_kv_heads * head_dim * (window + sink) * dtype_bytes``.
     """
     params = model.parameters()
     bytes_per = torch.tensor([], dtype=next(params).dtype).element_size()
+    cfg_ = model.config
+    num_kv = getattr(cfg_, "num_key_value_heads", None) or cfg_.num_attention_heads
+    head_dim = getattr(cfg_, "head_dim", None) or (cfg_.hidden_size // cfg_.num_attention_heads)
     size_bytes = (
         2
-        * model.config.num_hidden_layers
+        * cfg_.num_hidden_layers
+        * num_kv
+        * head_dim
         * (cfg.window + cfg.sink)
-        * model.config.hidden_size
         * bytes_per
     )
     return size_bytes / (1024 * 1024)
