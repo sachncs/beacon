@@ -5,6 +5,7 @@ Instead we patch the per-subcommand ``run`` functions to record that
 they were called and assert the dispatch flow.
 """
 
+import argparse
 import importlib
 
 import pytest
@@ -224,6 +225,21 @@ def test_default_model_env(monkeypatch):
     assert cli.DEFAULT_MODEL == "env-model"
     # Reload other modules too in case they cache it.
     monkeypatch.delenv("BEACON_MODEL")
+
+
+def test_default_window_and_sink_are_consistent_across_subcommands():
+    """Every subcommand must share the same --window / --sink defaults."""
+    from beacon import cli
+
+    assert cli.DEFAULT_WINDOW == 64
+    assert cli.DEFAULT_SINK == 4
+
+    parser = argparse.ArgumentParser(prog="beacon-eval")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    for name in ("short", "find", "story", "speed"):
+        p = sub.add_parser(name)
+        p.add_argument("--window", type=int, default=cli.DEFAULT_WINDOW)
+        p.add_argument("--sink", type=int, default=cli.DEFAULT_SINK)
 
 
 if __name__ == "__main__":
