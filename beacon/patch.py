@@ -226,7 +226,19 @@ def swa_create_causal_mask(upstream: Callable):
             config=config,
         )
 
-    functools.wraps(upstream)(create_causal_mask)
+    # Copy only the metadata we want from ``upstream``: name, qualname, doc.
+    # functools.wraps would also copy ``__signature__``, which would advertise
+    # upstream's parameter list (with any kwargs we don't accept); that breaks
+    # ``inspect.signature(replacement)`` and IDE tooltips. ``__wrapped__`` is
+    # omitted for the same reason — our wrapper is *not* a drop-in replacement
+    # the way functools expects.
+    create_causal_mask.__name__ = getattr(upstream, "__name__", "create_causal_mask")
+    create_causal_mask.__qualname__ = getattr(
+        upstream, "__qualname__", "create_causal_mask"
+    )
+    create_causal_mask.__doc__ = (
+        f"[beacon-patched] {upstream.__doc__}" if upstream.__doc__ else None
+    )
     create_causal_mask._beacon_upstream = upstream
     return create_causal_mask
 
