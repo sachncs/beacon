@@ -1,5 +1,10 @@
 # beacon
 
+[![CI](https://github.com/sachncs/beacon/actions/workflows/ci.yml/badge.svg)](https://github.com/sachncs/beacon/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.2.0-orange.svg)](pyproject.toml)
+
 A reproduction of **"Sliding-window beats linear attention"** (Jolicoeur-Martineau et al., 2026).
 
 The paper's claim: a plain pretrained Transformer with its attention mask replaced by
