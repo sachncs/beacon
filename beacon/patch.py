@@ -283,6 +283,7 @@ def patch(model: T, cfg: Config) -> T:
             "the SWA-with-sinks patch is unsupported for it"
         )
 
+    previous_attn = getattr(model.config, "_attn_implementation", None)
     model.config._attn_implementation = "eager"
     module.create_causal_mask = swa_create_causal_mask(upstream)
     model.config._beacon = {
@@ -290,6 +291,7 @@ def patch(model: T, cfg: Config) -> T:
         "sink": cfg.sink,
         "applied": True,
         "transformers_version": transformers_version(),
+        "previous_attn_implementation": previous_attn,
     }
     return model
 
