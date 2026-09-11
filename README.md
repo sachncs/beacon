@@ -15,6 +15,13 @@ zero post-training and lower memory.
 **beacon** = the SWA-with-sinks mechanism. Sink tokens act as beacons anchoring attention
 while the rest of the context scrolls past.
 
+The attend-set for one query position looks like this (sink columns on the
+left, sliding-window diagonal behind them):
+
+![SWA-with-sinks mask (window=4, sink=2)](docs/swa-mask.svg)
+
+Regenerate from `beacon.patch.mask` via `python docs/make_mask.py`.
+
 ## When to use
 
 `beacon` is for **inference-time** use of pretrained decoder-only language
