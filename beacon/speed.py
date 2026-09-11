@@ -131,6 +131,7 @@ def bench(
     dtype: torch.dtype | str = "float16",
     device: str | None = None,
     seed: int = 0,
+    base_model: PreTrainedModel | None = None,
 ) -> list[Bench]:
     """Run one method across the ctx grid.
 
@@ -139,8 +140,10 @@ def bench(
     decodes ``step`` single tokens against that cache. No ``torch.cat`` grows
     inside the timed region, and ``kv_mib`` is reported at the prefill length.
 
-    Loads ``model_id`` directly (no silent tiny-model substitution); any load
-    failure propagates.
+    Loads ``model_id`` directly when ``base_model is None`` (no silent
+    tiny-model substitution); any load failure propagates. Pass a pre-loaded
+    ``base_model`` to amortise the HF download across multiple ``method``
+    calls — ``run`` does this.
     """
     if method not in METHOD:
         raise ValueError(f"unknown method: {method!r}; choose from {list(METHOD)}")
@@ -149,14 +152,17 @@ def bench(
     dev = torch.device(device)
     torch_dtype = _coerce_dtype(dtype)
 
-    loader: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
-        model_id, torch_dtype=torch_dtype
-    )
-    # PreTrainedModel.to is mis-typed upstream (expects a model positional);
-    # call through the correctly-typed nn.Module.to instead.
-    module: torch.nn.Module = loader
-    module.to(dev)
-    model: PreTrainedModel = loader
+    if base_model is None:
+        loader: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch_dtype
+        )
+        # PreTrainedModel.to is mis-typed upstream (expects a model positional);
+        # call through the correctly-typed nn.Module.to instead.
+        module: torch.nn.Module = loader
+        module.to(dev)
+        model: PreTrainedModel = loader
+    else:
+        model = base_model
 
     model.eval()
     applied: PreTrainedModel = METHOD[method].apply(model, cfg)
@@ -216,11 +222,27 @@ def run(
     step: int = 64,
     seed: int = 0,
     dtype: str = "float16",
+    device: str | None = None,
     out: Path | None = None,
 ) -> dict[str, list[Bench]]:
-    """Run all configured methods across the ctx grid."""
+    """Run all configured methods across the ctx grid.
+
+    Loads the model once and reuses it across methods (one download + one
+    ``model.eval()`` instead of N). The bench function still accepts a raw
+    ``model_id`` for single-method use, so the public contract is unchanged.
+    """
     if ctx is None:
         ctx = [128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536, 131072, 262144]
+
+    dev = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+    torch_dtype = _coerce_dtype(dtype)
+    loader: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
+        model, torch_dtype=torch_dtype
+    )
+    module: torch.nn.Module = loader
+    module.to(dev)
+    base_model: PreTrainedModel = loader
+    base_model.eval()
 
     out_dict: dict[str, list[Bench]] = {}
     for m in method:
@@ -232,7 +254,9 @@ def run(
             ctx=ctx,
             step=step,
             dtype=dtype,
+            device=str(dev),
             seed=seed,
+            base_model=base_model,
         )
 
     if out is not None:
