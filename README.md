@@ -10,6 +10,23 @@ zero post-training and lower memory.
 **beacon** = the SWA-with-sinks mechanism. Sink tokens act as beacons anchoring attention
 while the rest of the context scrolls past.
 
+## When to use
+
+`beacon` is for **inference-time** use of pretrained decoder-only language
+models (Llama, Qwen, Gemma, Mistral, MiniCPM, Phi, GPT-2) on **long-context**
+workloads. It is most useful when:
+
+- You need to extend effective context length without retraining.
+- You can spare the first `window + sink` tokens of compute per layer (typically negligible).
+- You want a faithful reproduction of the paper's SWA-with-sinks baseline to compare against.
+
+It is **not** a substitute for:
+
+- **Training / fine-tuning** — `beacon` only affects forward attention; gradients, loss, and the optimizer are untouched.
+- **Encoder models** — BERT/RoBERTa and encoder-decoder (T5/BART) raise `NotImplementedError`.
+- **Production deployments that need sdpa/flash fused kernels** — `beacon` forces `eager` attention, which is slower than sdpa at small batch.
+- **Modalities beyond text** — the patch targets text LMs only.
+
 ## Install
 
 ```bash
