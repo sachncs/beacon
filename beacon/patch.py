@@ -107,10 +107,8 @@ def swa_mask_function(window: int, sink: int) -> Callable[[int, int, int, int], 
 
     The returned callable has the ``(batch_idx, head_idx, q_idx, kv_idx) -> bool``
     signature expected by ``transformers.masking_utils`` mask factories and is
-    built from that library's own vmap-safe combinators (:func:`transformers.
-    masking_utils.or_masks`, :func:`transformers.masking_utils.and_masks`,
-    :func:`transformers.masking_utils.sliding_window_overlay`,
-    :func:`transformers.masking_utils.causal_mask_function`).
+    built from that library's own vmap-safe combinators (causal / sliding-window
+    overlays and ``or_masks`` / ``and_masks``).
 
     ``q_idx`` and ``kv_idx`` are **absolute** positions (query positions come from
     ``cache_position``, key positions from ``kv_offset + arange(kv_length)``), so
@@ -119,6 +117,13 @@ def swa_mask_function(window: int, sink: int) -> Callable[[int, int, int, int], 
 
     A query at absolute position ``q`` attends to keys in ``[0, sink)`` union
     ``[q - window + 1, q]`` (``window`` positions ending at ``q``, inclusive).
+
+    Note
+    ----
+    This is a thin wrapper over the public mask combinators
+    (``causal_mask_function``, ``sliding_window_overlay``, ``or_masks``,
+    ``and_masks``). Those names have been stable across the 4.40-4.55+
+    transformers releases and remain the supported public surface.
     """
 
     def sink_allows(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
@@ -180,7 +185,7 @@ def swa_create_causal_mask(upstream: Callable):
             packed_sequence_mask,
             kv_length,
             kv_offset,
-        ) = masking_utils._preprocess_mask_arguments(
+        ) = _preprocess_mask_arguments(
             config, input_embeds, attention_mask, cache_position, past_key_values, position_ids, layer_idx=0
         )
         if early_exit:
@@ -225,6 +230,18 @@ def architecture_module(model: nn.Module):
         raise NotImplementedError(
             f"cannot locate the architecture module {module_name!r} for {type(model).__name__}"
         ) from exc
+
+
+def _preprocess_mask_arguments(*args, **kwargs):
+    """Forward to ``masking_utils._preprocess_mask_arguments`` with a single fallback.
+
+    The helper is private (``_`` prefix) upstream; pin the import once and let
+    transformers refactor without leaking ``masking_utils._`` into our source.
+    On AttributeError (renamed upstream) we still raise — this is a deliberate
+    signal that the transformers major we built against is no longer
+    compatible.
+    """
+    return masking_utils._preprocess_mask_arguments(*args, **kwargs)
 
 
 def transformers_version() -> tuple[int, int]:
