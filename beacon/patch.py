@@ -86,9 +86,18 @@ def mask(
     ``[0, sink)`` union ``[q - window + 1, q]``. This is position-accurate and is
     used by :func:`swa_mask_function` for the model-level patch; this standalone
     helper exists for testing and for callers that want a raw mask tensor.
+
+    The mask is materialised as a dense ``(seq_q, seq_k)`` tensor, which is
+    fine for typical prefill contexts but allocates ``O(seq_q * seq_k)``
+    bytes. For ``seq_q = 131072`` on fp16 that is ~32 GiB — do not call
+    ``mask()`` with very large sequence lengths on a single device. The model
+    patch uses a vmap-safe scalar predicate (``swa_mask_function``) and does
+    not hit this cost.
     """
     if seq_k < seq_q:
         raise ValueError(f"seq_k ({seq_k}) must be >= seq_q ({seq_q})")
+    if seq_q == 0:
+        return torch.zeros(1, 1, 0, seq_k, device=device, dtype=dtype)
 
     q = torch.arange(seq_q, device=device).view(-1, 1)
     k = torch.arange(seq_k, device=device).view(1, -1)
