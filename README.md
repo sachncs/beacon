@@ -92,6 +92,11 @@ python -m beacon.cli speed --model openbmb/MiniCPM5-1B \
 - [`docs/METHODS.md`](docs/METHODS.md) — how the SWA-with-sinks mask is built
   and how the patch reaches the real attention path (no silent full-causal
   fallback).
+- [`examples/`](examples/) — worked end-to-end scripts:
+  - [`01_basic_patch.py`](examples/01_basic_patch.py) — load, patch, generate.
+  - [`02_niah.py`](examples/02_niah.py) — one S-NIAH cell.
+  - [`03_babilong.py`](examples/03_babilong.py) — one QA1 BABILong cell.
+  - [`04_speed_compare.py`](examples/04_speed_compare.py) — speed + KV-cache numbers.
 - **Extension points** below — add a new NIAH variant, bAbI task, or attention method.
 - **Design principles** — the conventions used throughout the code.
 
