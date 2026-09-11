@@ -186,6 +186,39 @@ PYTHONPATH=. python -m pytest tests/ -q
 - **BABILong**: reimplemented from scratch (no `babilong` PyPI dep) — generators
   reproduce the same story structure; filler text is synthetic instead of PG essays.
 
+## Troubleshooting
+
+### `RuntimeError: cannot parse transformers version`
+
+You're on a transformers release whose version string doesn't match
+`MAJOR.MINOR`. Update to `transformers>=4.55`.
+
+### `NotImplementedError: architecture X does not route through create_causal_mask`
+
+`beacon` patches decoder-only LMs that route attention through
+`transformers.masking_utils.create_causal_mask` (Llama, Qwen, Mistral, Gemma,
+Phi, MiniCPM, GPT-2). Encoder models (BERT, RoBERTa) and encoder-decoder
+models (T5, BART) are unsupported.
+
+### CUDA OOM at long context
+
+Eager attention with a 4-D additive mask is memory-hungry. The standalone
+`mask()` helper materialises a dense `(seq_q, seq_k)` tensor — don't call it
+at `seq_q=131072` on a 16 GB GPU. Reduce `--ctx` or `--window` for the
+runners; the model patch itself uses a scalar predicate and does not hit
+this cost.
+
+### MiniCPM5-1B requires ~5 GB RAM
+
+The default model is 1B parameters in fp16 (~2 GB) plus K/V cache and
+activations. Allow at least 5 GB free RAM before running.
+
+### Speed benchmark is slow on CPU
+
+Eager attention is forced, so on CPU the SWA-vs-FA comparison is bound by
+CPU throughput, not by the attention difference. Run on GPU for the Figure 2
+comparison to be meaningful.
+
 ## Citation
 
 ```
