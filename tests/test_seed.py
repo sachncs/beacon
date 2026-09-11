@@ -1,13 +1,8 @@
 """Tests for beacon.seed — seed_all / seeded_rng determinism."""
 
 import random
-import sys
-from pathlib import Path
 
 import torch
-
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
 
 from beacon.seed import seed_all, seeded_rng
 
