@@ -406,8 +406,9 @@ def test_patch_old_transformers_raises(monkeypatch):
 
 def test_transformers_version_parses_pep440(monkeypatch):
     """The version parser must handle PEP 440 suffixes without truncation."""
-    import transformers as _tf
     import importlib
+
+    import transformers as _tf
 
     patch_mod = importlib.import_module("beacon.patch")
 
@@ -424,8 +425,9 @@ def test_transformers_version_parses_pep440(monkeypatch):
 
 
 def test_transformers_version_rejects_garbage(monkeypatch):
-    import transformers as _tf
     import importlib
+
+    import transformers as _tf
 
     patch_mod = importlib.import_module("beacon.patch")
 
@@ -437,8 +439,9 @@ def test_transformers_version_rejects_garbage(monkeypatch):
 
 def test_unpatch_restores_upstream_and_clears_stamp():
     """unpatch() restores the upstream create_causal_mask and clears config._beacon."""
-    from beacon.patch import unpatch
     from transformers import AutoConfig, AutoModelForCausalLM
+
+    from beacon.patch import unpatch
 
     config = AutoConfig.from_pretrained(
         "hf-internal-testing/tiny-random-LlamaForCausalLM",
@@ -454,8 +457,9 @@ def test_unpatch_restores_upstream_and_clears_stamp():
 
 def test_unpatch_is_noop_on_unpatched_model():
     """unpatch() on a fresh model leaves it untouched."""
-    from beacon.patch import unpatch
     from transformers import AutoConfig, AutoModelForCausalLM
+
+    from beacon.patch import unpatch
 
     config = AutoConfig.from_pretrained(
         "hf-internal-testing/tiny-random-LlamaForCausalLM",

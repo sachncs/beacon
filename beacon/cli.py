@@ -23,7 +23,6 @@ from pathlib import Path
 from . import find, short, speed, story
 from .patch import Config
 
-
 DEFAULT_MODEL = os.environ.get("BEACON_MODEL", "openbmb/MiniCPM5-1B")
 
 

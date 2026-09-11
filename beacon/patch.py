@@ -16,14 +16,15 @@ builds the SWA-with-sinks mask instead of a full causal mask.
 
 from __future__ import annotations
 
-import importlib
 import functools
+import importlib
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, TypeVar
+from typing import TypeVar
 
 import torch
 import torch.nn as nn
-from transformers import PreTrainedModel, __version__, masking_utils
+from transformers import PreTrainedModel, masking_utils
 
 T = TypeVar("T", bound=PreTrainedModel)
 

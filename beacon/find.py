@@ -21,8 +21,8 @@ import json
 import random
 import string
 from collections import defaultdict
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Callable, Sequence
 
 import torch
 
@@ -30,7 +30,6 @@ from .load import load
 from .patch import Config
 from .sample import Sample, contains, filler, insert
 from .seed import seeded_rng
-
 
 VariantFn = Callable[[random.Random], tuple[str, str, str]]
 

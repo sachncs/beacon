@@ -24,8 +24,8 @@ from __future__ import annotations
 import json
 import random
 from collections import defaultdict
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import torch
 
@@ -33,7 +33,6 @@ from .load import load
 from .patch import Config
 from .sample import Sample, contains, filler
 from .seed import seeded_rng
-
 
 TaskFn = Callable[[random.Random], tuple[str, str, str]]
 
