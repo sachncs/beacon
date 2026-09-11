@@ -25,6 +25,9 @@ from .patch import Config
 
 DEFAULT_MODEL = os.environ.get("BEACON_MODEL", "openbmb/MiniCPM5-1B")
 
+DEFAULT_WINDOW = 64
+DEFAULT_SINK = 4
+
 
 def optional_path(s: str | None) -> Path | None:
     return Path(s) if s else None
@@ -118,8 +121,8 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("short", help="short-context benchmarks (Table 2)")
     p.add_argument("--model", default=DEFAULT_MODEL)
-    p.add_argument("--window", type=int, default=64)
-    p.add_argument("--sink", type=int, default=4)
+    p.add_argument("--window", type=int, default=DEFAULT_WINDOW)
+    p.add_argument("--sink", type=int, default=DEFAULT_SINK)
     p.add_argument("--task", default="mmlu,arc_challenge,arc_easy,hellaswag,piqa,winogrande")
     p.add_argument("--batch", default="auto:4")
     p.add_argument("--shot", type=int, default=5)
@@ -129,8 +132,8 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("find", help="Single Needle-in-a-Haystack (Table 3)")
     p.add_argument("--model", default=DEFAULT_MODEL)
-    p.add_argument("--window", type=int, default=256)
-    p.add_argument("--sink", type=int, default=4)
+    p.add_argument("--window", type=int, default=DEFAULT_WINDOW)
+    p.add_argument("--sink", type=int, default=DEFAULT_SINK)
     p.add_argument("--ctx", default="512,1024,2048,4096")
     p.add_argument("--variant", default="1,2,3")
     p.add_argument("--frac", default="0.0,0.25,0.5,0.75,1.0")
@@ -142,8 +145,8 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("story", help="BABILong (Table 4)")
     p.add_argument("--model", default=DEFAULT_MODEL)
-    p.add_argument("--window", type=int, default=256)
-    p.add_argument("--sink", type=int, default=4)
+    p.add_argument("--window", type=int, default=DEFAULT_WINDOW)
+    p.add_argument("--sink", type=int, default=DEFAULT_SINK)
     p.add_argument("--ctx", default="1000,2000,4000,8000")
     p.add_argument("--task", default="1,2,3,4,5")
     p.add_argument("--frac", default="0.5")
@@ -156,8 +159,8 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("speed", help="Speed / KV-cache memory benchmark (Figure 2)")
     p.add_argument("--model", default=DEFAULT_MODEL)
-    p.add_argument("--window", type=int, default=64)
-    p.add_argument("--sink", type=int, default=4)
+    p.add_argument("--window", type=int, default=DEFAULT_WINDOW)
+    p.add_argument("--sink", type=int, default=DEFAULT_SINK)
     p.add_argument("--ctx", default="128,256,512,1024,2048,4096,8192,16384,65536")
     p.add_argument("--method", default="fa,swa")
     p.add_argument("--step", type=int, default=64)
@@ -170,7 +173,18 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-__all__ = ["main", "DEFAULT_MODEL", "dispatch", "make_config", "optional_path", "ints", "floats", "strs"]
+__all__ = [
+    "main",
+    "DEFAULT_MODEL",
+    "DEFAULT_WINDOW",
+    "DEFAULT_SINK",
+    "dispatch",
+    "make_config",
+    "optional_path",
+    "ints",
+    "floats",
+    "strs",
+]
 
 
 if __name__ == "__main__":

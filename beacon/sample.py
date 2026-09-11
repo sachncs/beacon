@@ -16,7 +16,6 @@ import random
 import re
 from dataclasses import dataclass
 
-
 _VOCAB = (
     "the of and to in a is that for on with as it was by an be this are not from "
     "at or have but his they she which we one all there their what when your can "
