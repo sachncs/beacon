@@ -37,6 +37,16 @@ from .patch import Config
 DEFAULT_TASK: tuple[str, ...] = ("mmlu", "arc_challenge", "arc_easy", "hellaswag", "piqa", "winogrande")
 
 
+CANONICAL_METRIC: dict[str, str] = {
+    "hellaswag": "acc_norm,none",
+    "arc_easy": "acc_norm,none",
+    "arc_challenge": "acc_norm,none",
+    "piqa": "acc_norm,none",
+    "winogrande": "acc,none",
+    "mmlu": "acc,none",
+}
+
+
 @dataclass(frozen=True)
 class Short:
     """Configuration for a short-context evaluation run."""
@@ -49,6 +59,22 @@ class Short:
     limit: int | None = None
     dtype: torch.dtype | str = torch.float16
     out: Path | None = None
+
+
+def _primary_metric(task: str, res: dict) -> float:
+    """Pick the canonical accuracy metric for ``task`` from one lm-eval result row.
+
+    HellaSwag / ARC / PIQA / OpenBookQA report both raw and length-normalised
+    accuracy; the length-normalised figure (``acc_norm``) is the metric the
+    paper compares against. WinoGrande and MMLU only report ``acc``.
+    """
+    preferred = CANONICAL_METRIC.get(task)
+    if preferred is not None and preferred in res:
+        return float(res[preferred])
+    for key in ("acc,none", "acc_norm,none", "mc2,none", "acc"):
+        if key in res:
+            return float(res[key])
+    raise KeyError(f"no accuracy-like metric found for task {task!r}: keys={list(res)}")
 
 
 def run(s: Short) -> dict[str, float]:
@@ -67,13 +93,13 @@ def run(s: Short) -> dict[str, float]:
         log_samples=False,
     )
 
-    # lm-eval reports several metrics per task; pick the canonical accuracy-ish one.
     flat: dict[str, float] = {}
     for task, res in results["results"].items():
-        for key in ("acc,none", "acc_norm,none", "mc2,none", "acc"):
-            if key in res:
-                flat[task] = float(res[key])
-                break
+        # lm-eval groups subtasks under the parent name (e.g. ``hellaswag`` for
+        # the group, ``mmlu`` for many subtasks). The ``task`` argument is the
+        # leaf name; the canonical-metric key is task-family-level.
+        key = task.split(":", 1)[0]
+        flat[task] = _primary_metric(key, res)
 
     if s.out is not None:
         s.out.parent.mkdir(parents=True, exist_ok=True)
