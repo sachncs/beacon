@@ -135,8 +135,9 @@ PYTHONPATH=. python -m pytest tests/ -q
 
 - **Default model**: `openbmb/MiniCPM5-1B` (matches the paper's LlamaForCausalLM
   architectural profile, including GQA).
-- **Hardware**: tested on Apple Silicon and CUDA. Speed benchmarks target the
-  paper's RTX PRO 6000 spec where available; otherwise fall back to local device.
+- **Hardware**: unverified. The speed benchmark (`beacon.speed.run`) reports
+  whatever the local device produces; throughput numbers in this README and
+  in `docs/METHODS.md` are illustrative, not authoritative.
 - **BABILong**: reimplemented from scratch (no `babilong` PyPI dep) — generators
   reproduce the same story structure; filler text is synthetic instead of PG essays.
 
