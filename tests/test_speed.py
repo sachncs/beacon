@@ -49,10 +49,30 @@ def test_kv_matches_analytic_formula():
     model = AutoModelForCausalLM.from_config(config)
 
     bytes_per = torch.tensor([], dtype=torch.float32).element_size()
-    expected = 2 * 2 * 128 * config.hidden_size * bytes_per / (1024 * 1024)
+    num_kv = config.num_key_value_heads
+    head_dim = config.hidden_size // config.num_attention_heads
+    expected = 2 * 2 * num_kv * head_dim * 128 * bytes_per / (1024 * 1024)
     assert abs(kv(model, 128) - expected) < 1e-9
     # Doubling the sequence length should double the KV-cache memory.
     assert abs(kv(model, 256) - 2 * expected) < 1e-9
+
+
+def test_kv_with_gqa_uses_kv_heads_not_attention_heads():
+    """For GQA the KV-cache cost grows with num_kv_heads * head_dim, not hidden_size."""
+    from transformers import AutoConfig, AutoModelForCausalLM
+
+    config = AutoConfig.from_pretrained(
+        "hf-internal-testing/tiny-random-LlamaForCausalLM",
+        num_hidden_layers=2,
+        num_attention_heads=16,
+        num_key_value_heads=2,
+    )
+    model = AutoModelForCausalLM.from_config(config)
+    bytes_per = torch.tensor([], dtype=torch.float32).element_size()
+    naive = 2 * 2 * 128 * config.hidden_size * bytes_per / (1024 * 1024)
+    correct = 2 * 2 * 2 * config.head_dim * 128 * bytes_per / (1024 * 1024)
+    assert abs(kv(model, 128) - naive) > 1e-6
+    assert abs(kv(model, 128) - correct) < 1e-9
 
 
 def test_kv_swa_is_bounded_by_window_plus_sink():
@@ -65,8 +85,10 @@ def test_kv_swa_is_bounded_by_window_plus_sink():
     model = AutoModelForCausalLM.from_config(config)
 
     bytes_per = torch.tensor([], dtype=torch.float32).element_size()
+    num_kv = config.num_key_value_heads
+    head_dim = config.hidden_size // config.num_attention_heads
     cfg = Config(window=64, sink=4)
-    expected = 2 * 2 * (64 + 4) * config.hidden_size * bytes_per / (1024 * 1024)
+    expected = 2 * 2 * num_kv * head_dim * (64 + 4) * bytes_per / (1024 * 1024)
     assert abs(kv_swa(model, cfg) - expected) < 1e-9
     # SWA memory is independent of seq_len: a bigger window is the only driver.
     big = Config(window=256, sink=4)
