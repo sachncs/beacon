@@ -20,6 +20,10 @@ mask. A query at absolute position `q` attends to keys:
   to them, even queries that would otherwise look *ahead* into the first
   `sink` tokens (early queries may attend later sink positions by design).
 
+A representative `(window=4, sink=2)` configuration on a 16x16 grid:
+
+![SWA-with-sinks mask](../docs/swa-mask.svg)
+
 Because the mask is built from vmap-safe combinators from
 `transformers.masking_utils` (`or_masks`, `and_masks`, `sliding_window_overlay`,
 `causal_mask_function`), it composes correctly with the batched eager backend.
