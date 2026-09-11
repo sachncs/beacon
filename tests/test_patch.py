@@ -356,12 +356,11 @@ def test_patch_forces_eager_and_stamps_config():
     model.eval()
     patch(model, Config(window=8, sink=3))
     assert model.config._attn_implementation == "eager"
-    assert model.config._beacon == {
-        "window": 8,
-        "sink": 3,
-        "applied": True,
-        "transformers_version": model.config._beacon["transformers_version"],
-    }
+    beacon = model.config._beacon
+    assert beacon["window"] == 8
+    assert beacon["sink"] == 3
+    assert beacon["applied"] is True
+    assert "previous_attn_implementation" in beacon
 
 
 def test_patch_preserves_padding():
