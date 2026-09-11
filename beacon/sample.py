@@ -16,6 +16,7 @@ import random
 import re
 from dataclasses import dataclass
 
+
 _VOCAB = (
     "the of and to in a is that for on with as it was by an be this are not from "
     "at or have but his they she which we one all there their what when your can "
@@ -38,7 +39,15 @@ class Sample:
 
 
 def filler(rng: random.Random, n_words: int) -> str:
-    """Pseudo-English haystack of roughly ``n_words`` words."""
+    """Pseudo-English haystack of roughly ``n_words`` words.
+
+    The original BABILong / NIAH work uses Project Gutenberg essays as the
+    haystack so that the needle is plausibly embedded in real natural
+    language. The default here is a synthetic word salad drawn from a small
+    English stopword vocabulary, which is enough to exercise the attention
+    window and the containment scorer without a multi-MB download. Pass a
+    ``rng`` seeded by the caller to keep samples reproducible.
+    """
     out: list[str] = []
     total = 0
     while total < n_words:
@@ -47,7 +56,6 @@ def filler(rng: random.Random, n_words: int) -> str:
         out.append(sent.capitalize())
         total += sent_len + 1
     return " ".join(out)
-
 
 def insert(haystack: str, needle: str, frac: float) -> str:
     """Embed ``needle`` at fraction ``frac`` of the word-tokenised haystack."""
