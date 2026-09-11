@@ -33,7 +33,6 @@ from lm_eval.models.huggingface import HFLM
 from .load import load
 from .patch import Config
 
-
 DEFAULT_TASK: tuple[str, ...] = ("mmlu", "arc_challenge", "arc_easy", "hellaswag", "piqa", "winogrande")
 
 

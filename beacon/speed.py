@@ -25,9 +25,9 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Callable
 
 import torch
 from transformers import AutoModelForCausalLM, DynamicCache, PreTrainedModel
@@ -35,7 +35,6 @@ from transformers import AutoModelForCausalLM, DynamicCache, PreTrainedModel
 from .load import _coerce_dtype
 from .patch import Config, patch
 from .seed import seed_all
-
 
 MethodFn = Callable[[PreTrainedModel, Config], PreTrainedModel]
 
