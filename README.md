@@ -75,6 +75,14 @@ python -m beacon.cli speed --model openbmb/MiniCPM5-1B \
     --window 64 --sink 4 --method fa,swa
 ```
 
+### Where to go next
+
+- [`docs/METHODS.md`](docs/METHODS.md) — how the SWA-with-sinks mask is built
+  and how the patch reaches the real attention path (no silent full-causal
+  fallback).
+- **Extension points** below — add a new NIAH variant, bAbI task, or attention method.
+- **Design principles** — the conventions used throughout the code.
+
 ### What the output looks like
 
 Each subcommand prints one line per cell to stdout (the JSON dump in
@@ -221,10 +229,6 @@ comparison to be meaningful.
 
 ## Citation
 
-```
-@inproceedings{jolicoeurmartineau2026sliding,
-  title  = {Sliding-window beats linear attention},
-  author = {Jolicoeur-Martineau, Alexia and Sukthanker, Rhea Sanjay and Cameron, Pashmina and Gervais, Emy},
-  year   = {2026}
-}
-```
+A formal citation will be added when the paper is publicly available.
+
+For now, link to the upstream project: <https://github.com/sachncs/beacon>.
