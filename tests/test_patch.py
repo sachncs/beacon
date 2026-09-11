@@ -405,6 +405,38 @@ def test_patch_old_transformers_raises(monkeypatch):
         patch_mod.patch(None, Config(window=4, sink=2))
 
 
+def test_unpatch_restores_upstream_and_clears_stamp():
+    """unpatch() restores the upstream create_causal_mask and clears config._beacon."""
+    from beacon.patch import unpatch
+    from transformers import AutoConfig, AutoModelForCausalLM
+
+    config = AutoConfig.from_pretrained(
+        "hf-internal-testing/tiny-random-LlamaForCausalLM",
+        num_hidden_layers=1,
+    )
+    model = AutoModelForCausalLM.from_config(config).eval()
+    patch(model, Config(window=4, sink=2))
+    assert getattr(model.config, "_beacon", None) is not None
+
+    unpatch(model)
+    assert not hasattr(model.config, "_beacon")
+
+
+def test_unpatch_is_noop_on_unpatched_model():
+    """unpatch() on a fresh model leaves it untouched."""
+    from beacon.patch import unpatch
+    from transformers import AutoConfig, AutoModelForCausalLM
+
+    config = AutoConfig.from_pretrained(
+        "hf-internal-testing/tiny-random-LlamaForCausalLM",
+        num_hidden_layers=1,
+    )
+    model = AutoModelForCausalLM.from_config(config).eval()
+    out = unpatch(model)
+    assert out is model
+    assert not hasattr(model.config, "_beacon")
+
+
 if __name__ == "__main__":
     test_mask_shape_and_dtype()
     test_prefill_attends_to_sinks_and_window()
