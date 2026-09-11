@@ -245,16 +245,30 @@ def _preprocess_mask_arguments(*args, **kwargs):
 
 
 def transformers_version() -> tuple[int, int]:
-    """Return ``transformers.__version__`` as a ``(major, minor)`` tuple."""
-    parts = []
-    for tok in __version__.split(".")[:2]:
-        digits = "".join(ch for ch in tok if ch.isdigit())
+    """Return ``transformers.__version__`` as a ``(major, minor)`` tuple.
+
+    Accepts PEP 440 strings (``4.55.0``, ``4.55.0rc1``, ``4.55.0.post1``,
+    ``4.55.0.dev0``) and rejects anything else loudly rather than guessing.
+    """
+    import transformers as _tf
+
+    raw = _tf.__version__
+    parts: list[str] = []
+    for chunk in raw.split("."):
+        digits = ""
+        for ch in chunk:
+            if ch.isdigit():
+                digits += ch
+            else:
+                break
         if not digits:
             break
-        parts.append(int(digits))
+        parts.append(digits)
     if len(parts) < 2:
-        raise RuntimeError(f"cannot parse transformers version {__version__!r}")
-    return parts[0], parts[1]
+        raise RuntimeError(
+            f"cannot parse transformers version {raw!r}: expected 'MAJOR.MINOR[...]'"
+        )
+    return int(parts[0]), int(parts[1])
 
 
 def check_transformers_version() -> None:
