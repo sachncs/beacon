@@ -404,6 +404,37 @@ def test_patch_old_transformers_raises(monkeypatch):
         patch_mod.patch(None, Config(window=4, sink=2))
 
 
+def test_transformers_version_parses_pep440(monkeypatch):
+    """The version parser must handle PEP 440 suffixes without truncation."""
+    import transformers as _tf
+    import importlib
+
+    patch_mod = importlib.import_module("beacon.patch")
+
+    for raw, expected in [
+        ("4.55.0", (4, 55)),
+        ("4.55.0rc1", (4, 55)),
+        ("4.55.0.post1", (4, 55)),
+        ("4.55.0.dev0", (4, 55)),
+        ("5.0", (5, 0)),
+        ("4.56", (4, 56)),
+    ]:
+        monkeypatch.setattr(_tf, "__version__", raw)
+        assert patch_mod.transformers_version() == expected, raw
+
+
+def test_transformers_version_rejects_garbage(monkeypatch):
+    import transformers as _tf
+    import importlib
+
+    patch_mod = importlib.import_module("beacon.patch")
+
+    for bad in ("", "abc", "1", "1.dev"):
+        monkeypatch.setattr(_tf, "__version__", bad)
+        with pytest.raises(RuntimeError):
+            patch_mod.transformers_version()
+
+
 def test_unpatch_restores_upstream_and_clears_stamp():
     """unpatch() restores the upstream create_causal_mask and clears config._beacon."""
     from beacon.patch import unpatch
