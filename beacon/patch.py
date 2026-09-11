@@ -29,7 +29,7 @@ T = TypeVar("T", bound=PreTrainedModel)
 
 MIN_TRANSFORMERS = (4, 55)
 
-__all__ = ["Config", "mask", "swa_mask_function", "swa_create_causal_mask", "patch"]
+__all__ = ["Config", "mask", "swa_mask_function", "swa_create_causal_mask", "patch", "unpatch"]
 
 
 @dataclass
@@ -212,6 +212,7 @@ def swa_create_causal_mask(upstream: Callable):
         )
 
     functools.wraps(upstream)(create_causal_mask)
+    create_causal_mask._beacon_upstream = upstream
     return create_causal_mask
 
 
@@ -290,4 +291,31 @@ def patch(model: T, cfg: Config) -> T:
         "applied": True,
         "transformers_version": transformers_version(),
     }
+    return model
+
+
+def unpatch(model: T) -> T:
+    """Restore ``model`` to its pre-``patch`` state.
+
+    Restores the upstream ``create_causal_mask`` and clears the ``_beacon`` stamp
+    on ``model.config``. The previous ``_attn_implementation`` is not restored
+    (the patch only forces eager and was the source of the change, so we leave
+    the user's choice alone after the patch was applied). No-op if ``model`` is
+    not patched.
+    """
+    if not isinstance(model, PreTrainedModel):
+        raise TypeError(
+            f"unpatch expects a transformers PreTrainedModel, got {type(model).__name__}"
+        )
+    beacon = getattr(model.config, "_beacon", None)
+    if beacon is None:
+        return model
+
+    module = architecture_module(model)
+    builder = getattr(module, "create_causal_mask", None)
+    upstream = getattr(builder, "_beacon_upstream", None) if builder is not None else None
+    if upstream is not None:
+        module.create_causal_mask = upstream
+    if hasattr(model.config, "_beacon"):
+        del model.config._beacon
     return model

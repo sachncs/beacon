@@ -9,7 +9,7 @@ Public API::
 """
 
 from .load import load
-from .patch import Config, mask, patch
+from .patch import Config, mask, patch, unpatch
 
 __version__ = "0.2.0"
-__all__ = ["Config", "mask", "patch", "load", "__version__"]
+__all__ = ["Config", "mask", "patch", "unpatch", "load", "__version__"]
