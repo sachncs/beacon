@@ -452,9 +452,8 @@ def test_unpatch_restores_upstream_and_clears_stamp():
 
 def test_unpatch_is_noop_on_unpatched_model():
     """unpatch() on a fresh model leaves it untouched."""
-    from transformers import AutoConfig, AutoModelForCausalLM
-
     from beacon.patch import unpatch
+    from transformers import AutoConfig, AutoModelForCausalLM
 
     config = AutoConfig.from_pretrained(
         "hf-internal-testing/tiny-random-LlamaForCausalLM",
@@ -464,6 +463,36 @@ def test_unpatch_is_noop_on_unpatched_model():
     out = unpatch(model)
     assert out is model
     assert not hasattr(model.config, "_beacon")
+
+
+def test_swa_create_causal_mask_does_not_inherit_upstream_signature():
+    """The patched builder must advertise its own parameter list, not upstream's.
+
+    ``functools.wraps`` copies ``__signature__`` along with name/qualname/doc,
+    which would make ``inspect.signature(replacement)`` return upstream's
+    parameter list. With the current transformers ``create_causal_mask``
+    signature containing kwargs the wrapper does not accept, that misleads
+    IDEs and downstream ``getfullargspec``-style introspection.
+    """
+    import inspect
+
+    from beacon.patch import swa_create_causal_mask
+    from transformers.masking_utils import create_causal_mask as upstream
+
+    wrapped = swa_create_causal_mask(upstream)
+    sig = inspect.signature(wrapped)
+    params = list(sig.parameters)
+    assert params == [
+        "config",
+        "input_embeds",
+        "attention_mask",
+        "cache_position",
+        "past_key_values",
+        "position_ids",
+        "or_mask_function",
+        "and_mask_function",
+    ]
+    assert not hasattr(wrapped, "__wrapped__")
 
 
 if __name__ == "__main__":
