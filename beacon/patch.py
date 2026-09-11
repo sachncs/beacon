@@ -16,7 +16,6 @@ builds the SWA-with-sinks mask instead of a full causal mask.
 
 from __future__ import annotations
 
-import functools
 import importlib
 from collections.abc import Callable
 from dataclasses import dataclass
