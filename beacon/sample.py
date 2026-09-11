@@ -60,10 +60,20 @@ def insert(haystack: str, needle: str, frac: float) -> str:
     return " ".join(tokens)
 
 
+def _normalize(s: str) -> str:
+    """Lowercase and replace every non-letter / non-digit with a single space.
+
+    Underscores are treated as separators so ``hello_world`` matches
+    ``hello world`` (Python's ``\\w`` includes ``_``, which would otherwise
+    leak into both sides and break the comparison).
+    """
+    return re.sub(r"[^a-z0-9]+", " ", s.lower()).strip()
+
+
 def contains(answer: str, completion: str) -> bool:
     """Case- and whitespace-insensitive containment of ``answer`` in ``completion``."""
-    a = re.sub(r"\W+", " ", answer.lower()).strip()
-    c = re.sub(r"\W+", " ", completion.lower()).strip()
+    a = _normalize(answer)
+    c = _normalize(completion)
     return bool(a) and a in c
 
 
