@@ -452,8 +452,9 @@ def test_unpatch_restores_upstream_and_clears_stamp():
 
 def test_unpatch_is_noop_on_unpatched_model():
     """unpatch() on a fresh model leaves it untouched."""
-    from beacon.patch import unpatch
     from transformers import AutoConfig, AutoModelForCausalLM
+
+    from beacon.patch import unpatch
 
     config = AutoConfig.from_pretrained(
         "hf-internal-testing/tiny-random-LlamaForCausalLM",
@@ -476,8 +477,9 @@ def test_swa_create_causal_mask_does_not_inherit_upstream_signature():
     """
     import inspect
 
-    from beacon.patch import swa_create_causal_mask
     from transformers.masking_utils import create_causal_mask as upstream
+
+    from beacon.patch import swa_create_causal_mask
 
     wrapped = swa_create_causal_mask(upstream)
     sig = inspect.signature(wrapped)
